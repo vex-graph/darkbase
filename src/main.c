@@ -13,6 +13,37 @@
 
 #include "database/database.h"
 #include "reflection/struct.h"
+#include "annotation/definition.h"
+#include "annotation/overview.h"
+
+;;DEFINITION
+/** A demonstration host, and deliberately nothing more: it exists to prove the
+ * engine is consumable from outside itself. It owns two Database handles and two
+ * Struct schemas in sequence — never at once — and frees each before opening the
+ * next, so the round trip is the only state that crosses between them. The
+ * checks are counted rather than asserted, because a consumer should report how
+ * many things it verified instead of aborting on the first surprise. */
+
+;;OVERVIEW
+/**
+ * ============================================================================
+ * MODULE: main (personal/darkbase/src/main.c — R5 consumer host, owns no class)
+ * ============================================================================
+ * The consumer side of the R3 store seam. It registers a schema, binds real
+ * rows, writes a `.vexdb`, then reopens that file in a fresh Database and reads
+ * the rows back. If the store cannot survive that round trip, the host exits
+ * nonzero.
+ *
+ * SLOT RECORD:
+ *   Message { uintptr_t authorId; uint64_t at; char body[64]; } — the row. Its
+ *   layout IS the schema; the store copies nothing and owns no row.
+ *
+ * FUNCTION REGISTRY:
+ *   static Struct *messageSchema(void) — the entity's reflection Struct, sized
+ *     to the row.
+ *   int main(int, char **) — write path, reopen path, check tally.
+ * ============================================================================
+ */
 
 // A message is an ordinary C struct; its layout IS the schema (the Entity Model
 // Law) — the store copies nothing and owns no row.
@@ -80,7 +111,7 @@ int main(int argc, char **argv) {
     const Message *row = Database_row(reopened, MESSAGE_ENTITY, 0u);
     CHECK(row != nullptr);
     if (row != nullptr)
-        CHECK(strcmp(row->body, "hello from the R5 consumer") == 0);
+        CHECK(strcmp((*row).body, "hello from the R5 consumer") == 0);
     printf("darkbase consumer: %u row(s) round-tripped through %s\n",
            Database_count(reopened, MESSAGE_ENTITY), path);
     Database_free(reopened);
