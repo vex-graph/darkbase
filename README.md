@@ -1,6 +1,6 @@
 # darkbase — the R5 consumer
 
-The host that **uses** the [darkbase-engine](../../drivers/darkbase-engine) store.
+The host that **uses** the [darkbase-engine](../../ecosystem/darkbase-engine) store.
 The engine owns the `Database` contract and the `.vexdb` format; this repository
 owns the consuming application: it decides what an entity *means*.
 
@@ -28,7 +28,7 @@ store at all.
   `Database_save` / `Database_load` round trip, and the store's cold rejection
   codes surfaced to the caller.
 - **Does not cover:** any UI or terminal surface; users/servers/channels/messages
-  as product concepts (that is Primeagen's direction, not this repo's); migrations;
+  as product concepts; migrations;
   concurrent access; the mmap/paged store, transactions/WAL, reactive programs or
   external drivers, which the engine's README lists as unimplemented.
 - **Limits:** owner-affine single-threaded use; rows are caller-owned and must
