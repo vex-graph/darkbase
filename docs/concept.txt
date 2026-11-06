@@ -1,0 +1,36 @@
+the concept of database goes this:
+
+encapsulation as it is:
+
+Database db = Database()
+db.setName()
+setModifier() // theres so many modifiers
+
+the difference between Sensitive and Salted...
+
+sensitive is when lets say: each password will generate a 128 char password that the admin or even the user know...
+it is saved in a private sensitive enclave, that no public api is being used...
+
+then theres a concept where in order for you to get that value
+
+lets say "sdfhjskljfslkjfs" as the generated password and the actual password is "hello"
+
+they have to do one additional variable calld a salted string.. which is a compound system
+
+like "sdfhjskljfslkjfs" = (compound salt + final static database key, which is inside the server, no one can access that key + user's actual password)
+thats how we get that exact thing... and i think thats the model we use
+
+and the concept behind that isnt "to protect the database more" but rather not put actual information verbatim inside the database. and it really needs the actual user password, and it must be in order
+
+users password > database key > compound key
+
+and even if theres database key and compound key, they cant really debunk it because its not possible to desalt without the first process
+
+and EVEN if they are able to get the exact "sdfhjskljfslkjfs", they cant really do anything with it because they cant desalt "sdfhjskljfslkjfs" as is... because the process of logging in has to be thru the desalting process... thats why..
+
+and that "sdfhjskljfslkjfs" doesnt mean thats their actual password, its like, they get the lock, yes, you got the lock, but you need...
+
+1. the key of the lock
+2. the metal mechanism of the lock
+
+so your lock is just a brick.. nothing else...

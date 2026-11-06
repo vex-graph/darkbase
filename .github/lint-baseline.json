@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "note": "Ratchet baseline: CI fails only when a file/rule count grows.",
+  "total": 0,
+  "counts": {}
+}

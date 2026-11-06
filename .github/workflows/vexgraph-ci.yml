@@ -1,0 +1,16 @@
+# Vexgraph per-repo CI caller. Installed by vex-graph/worktree tools/ci_repos.py.
+# The reusable workflow lives in vex-graph/worktree and is pinned to `main`.
+name: Vexgraph CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  vexgraph:
+    uses: vex-graph/worktree/.github/workflows/repo-check.yml@main
+    with:
+      baseline: ".github/lint-baseline.json"
+      layout: ".github/arrange-baseline.json"
+    secrets: inherit
