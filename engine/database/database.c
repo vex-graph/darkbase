@@ -61,8 +61,8 @@
  * ----------------------------------------------------------------------------
  *   Database {
  *     ChunkedList *entities;           // DbEntity rows
- *     uint32_t chunkBytes;             // leaf budget for per-entity row lists
- *     int32_t lastCode;                // last DATABASE_* code
+ *     u32 chunkBytes;             // leaf budget for per-entity row lists
+ *     i32 lastCode;                // last DATABASE_* code
  *     char lastError[DB_ERROR_MESSAGE_MAX]; // last rejection text
  *   }
  *
@@ -78,48 +78,48 @@
  * SLOT RECORD (owned by Database, behaviorless; all behavior hangs off Database):
  *   DbEntity {
  *     char name[24];        // folded entity name (atom grammar)
- *     uint32_t owned;       // 1 = every row is Database-owned
- *     uint32_t pad;         // explicit padding
+ *     u32 owned;       // 1 = every row is Database-owned
+ *     u32 pad;         // explicit padding
  *     Struct *schema;       // borrowed reflection layout (the entity)
  *     ChunkedList *rows;    // row pointers (void*); stable addresses
  *     char indexField[24];  // folded indexed field name ("" = no index declared)
- *     uint32_t indexOffset; // in-row byte offset of the indexed span
- *     uint32_t indexDirty;  // 1 = the row list changed since the last rebuild
+ *     u32 indexOffset; // in-row byte offset of the indexed span
+ *     u32 indexDirty;  // 1 = the row list changed since the last rebuild
  *     ChunkedList *indexRecords; // DbIndexRecord rows, key-sorted
  *   }
  * PRIVATE HELPER RECORD:
  *   DbIndexRecord {
- *     int32_t key;   // indexed int32 value admitted from the row bytes
- *     uint32_t pad;  // explicit padding
+ *     i32 key;   // indexed int32 value admitted from the row bytes
+ *     u32 pad;  // explicit padding
  *     void *row;     // borrowed bound row carrying that value
  *   }
  *   DbFieldSpan {
- *     int32_t code;  // DATABASE_OK, or the rejection code
+ *     i32 code;  // DATABASE_OK, or the rejection code
  *     Field *field;  // borrowed matched Field (null unless code is DATABASE_OK)
- *     uint32_t offset, size; // resolved in-row span of the requested field
+ *     u32 offset, size; // resolved in-row span of the requested field
  *   }
  *   DbLoadStage {
  *     DbEntity *entity;       // target untouched entity during staged loading
  *     ChunkedList *rows;      // temporary complete owned-row list
  *     ChunkedList *indexRecords; // persisted records re-pointed at the staged rows
  *     char indexField[24];    // persisted index definition
- *     uint32_t indexOffset;
+ *     u32 indexOffset;
  *   }
  *   DatabaseStoreRoot {
- *     char magic[8]; uint32_t version, firstPage; uint64_t length;
- *     uint32_t crc, reserved; // snapshot publication root, 32 Bytes
+ *     char magic[8]; u32 version, firstPage; u64 length;
+ *     u32 crc, reserved; // snapshot publication root, 32 Bytes
  *   }
  *   DatabaseStoreLink {
- *     uint32_t nextPage, chunkBytes; uint64_t offset;
+ *     u32 nextPage, chunkBytes; u64 offset;
  *     // linked data chunk; offsets must be contiguous while loading
  *   }
- *   DatabaseStoreCatalog { char magic[8]; uint32_t version, entityCount }
+ *   DatabaseStoreCatalog { char magic[8]; u32 version, entityCount }
  *     catalog byte-stream header (version 2 adds the persisted index section).
- *   DatabaseStoreEntity { char name[24]; uint32_t stride, rowCount;
- *                         char indexField[24]; uint32_t indexOffset, indexCount }
+ *   DatabaseStoreEntity { char name[24]; u32 stride, rowCount;
+ *                         char indexField[24]; u32 indexOffset, indexCount }
  *     one reflected entity descriptor followed by its raw row bytes and then its
  *     indexCount DatabaseStoreIndexRecord entries.
- *   DatabaseStoreIndexRecord { int32_t key; uint32_t rowIndex }
+ *   DatabaseStoreIndexRecord { i32 key; u32 rowIndex }
  *     one persisted index record: the key and the row position carrying it.
  *
  * PRIVATE HELPERS (persistence, pure logic):
@@ -143,14 +143,14 @@
  *                             _fieldSpan
  * Public Persistence: (.h) _save, _load
  *                      _saveStore, _loadStore (caller-owned page Store)
- *   int32_t Database_saveStore(Database *self, Store *store)
- *   int32_t Database_loadStore(Database *self, Store *store)
- *   DatabaseCatalogEntry Database_storeCatalogEntry(Store *store, uint32_t index)
+ *   i32 Database_saveStore(Database *self, Store *store)
+ *   i32 Database_loadStore(Database *self, Store *store)
+ *   DatabaseCatalogEntry Database_storeCatalogEntry(Store *store, u32 index)
  * Public Structured Query:
  *   DatabaseResult *Database_queryEqual(Database *self, const char *entity,
- *       const char *field, const void *value, size_t valueLength)
+ *       const char *field, const void *value, bytes valueLength)
  *   DatabaseResult *Database_queryInt32Range(Database *self, const char *entity,
- *       const char *field, int32_t minimum, int32_t maximum)
+ *       const char *field, i32 minimum, i32 maximum)
  * Store catalog discovery returns a copied DatabaseCatalogEntry value; its
  * name/stride/count remain valid after Store close. A requested out-of-range
  * position returns DATABASE_ABSENT and a cold diagnostic.
@@ -168,11 +168,11 @@
  * queryEqual validates one reflected Field span and scans rows for exact byte
  * equality. It allocates an owned pointer-list container, borrows matched rows,
  * and returns no numeric coercion, ordering, planner or persistent index.
- * queryInt32Range admits an exact int32_t byte span and interprets those bytes
- * as native int32_t values with inclusive signed comparisons. It uses the
+ * queryInt32Range admits an exact i32 byte span and interprets those bytes
+ * as native i32 values with inclusive signed comparisons. It uses the
  * entity's declared int32 index when one covers the field and scans otherwise,
  * returning the same matches either way (key order when indexed).
- * indexBuild admits only a REFLECT_FIELD_INDEXED span of exactly int32_t width:
+ * indexBuild admits only a REFLECT_FIELD_INDEXED span of exactly i32 width:
  * the records are an in-memory key-sorted array of borrowed row pointers,
  * refreshed after a row-list change and never persisted. The indexed field of a
  * bound row must not be mutated in place while an index exists.
@@ -183,30 +183,30 @@
 
 typedef struct DbEntity {
     char name[DB_ENTITY_NAME_BYTES]; // folded entity name (atom grammar)
-    uint32_t owned;                  // 1 = every row is Database-owned
-    uint32_t pad;                    // explicit padding
+    u32 owned;                  // 1 = every row is Database-owned
+    u32 pad;                    // explicit padding
     Struct *schema;                  // borrowed reflection layout (the entity)
     ChunkedList *rows;               // row pointers (void*); stable addresses
     char indexField[DB_ENTITY_NAME_BYTES]; // folded indexed field name ("" = none)
-    uint32_t indexOffset;            // in-row byte offset of the indexed span
-    uint32_t indexDirty;             // 1 = the row list changed since the rebuild
+    u32 indexOffset;            // in-row byte offset of the indexed span
+    u32 indexDirty;             // 1 = the row list changed since the rebuild
     ChunkedList *indexRecords;       // DbIndexRecord rows, key-sorted
 } DbEntity;
 
 // PRIVATE HELPER RECORD (owned by Database; behaviorless)
 typedef struct DbIndexRecord {
-    int32_t key;       // indexed int32 value admitted from the row bytes
-    uint32_t rowIndex; // position of that row inside the entity's row list
+    i32 key;       // indexed int32 value admitted from the row bytes
+    u32 rowIndex; // position of that row inside the entity's row list
     void *row;         // borrowed bound row carrying that value
 } DbIndexRecord;
 
 // PRIVATE HELPER RECORD (owned by Database; behaviorless) — the resolved span
 // of one requested field, returned by value (the Value Return Law).
 typedef struct DbFieldSpan {
-    int32_t code;  // DATABASE_OK, or the rejection code
+    i32 code;  // DATABASE_OK, or the rejection code
     Field *field;  // borrowed matched Field (null unless code is DATABASE_OK)
-    uint32_t offset;
-    uint32_t size;
+    u32 offset;
+    u32 size;
 } DbFieldSpan;
 
 // PRIVATE HELPER RECORD
@@ -215,7 +215,7 @@ typedef struct DbLoadStage {
     ChunkedList *rows;         // complete temporary owned row list
     ChunkedList *indexRecords; // persisted records, re-pointed at the staged rows
     char indexField[DB_ENTITY_NAME_BYTES]; // persisted index definition
-    uint32_t indexOffset;
+    u32 indexOffset;
 } DbLoadStage;
 
 // PRIVATE HELPERS
@@ -224,7 +224,7 @@ typedef struct DbLoadStage {
  * Stores the latest error code and bounded message when the Database exists.
  * A null message clears the stored text; a null Database is ignored.
  */
-static void recordError(Database *self, int32_t code, const char *message) {
+static void recordError(Database *self, i32 code, const char *message) {
     if (self == nullptr)
         return;
     (*self).lastCode = code;
@@ -232,9 +232,9 @@ static void recordError(Database *self, int32_t code, const char *message) {
         (*self).lastError[0] = '\0';
         return;
     }
-    size_t len = strlen(message);
-    size_t cap = sizeof((*self).lastError);
-    size_t copy = len < cap - 1u ? len : cap - 1u;
+    bytes len = strlen(message);
+    bytes cap = sizeof((*self).lastError);
+    bytes copy = len < cap - 1u ? len : cap - 1u;
     memcpy((*self).lastError, message, copy);
     (*self).lastError[copy] = '\0';
 }
@@ -243,14 +243,14 @@ static void recordError(Database *self, int32_t code, const char *message) {
  * Finds an entity by its already-folded name, returning its registry index or
  * -1 when the inputs, registry, or matching entity are absent.
  */
-static int32_t findEntity(const Database *self, const char *folded) {
+static i32 findEntity(const Database *self, const char *folded) {
     if (self == nullptr || folded == nullptr || (*self).entities == nullptr)
         return -1;
-    uint32_t n = ChunkedList_size((*self).entities);
-    for (uint32_t i = 0u; i < n; i++) {
+    u32 n = ChunkedList_size((*self).entities);
+    for (u32 i = 0u; i < n; i++) {
         DbEntity *entity = (DbEntity*) ChunkedList_slot((*self).entities, i);
         if (entity != nullptr && strcmp((*entity).name, folded) == 0)
-            return (int32_t) i;
+            return (i32) i;
     }
     return -1;
 }
@@ -278,12 +278,12 @@ static void indexInvalidate(DbEntity *entity) {
 }
 
 /** Borrow one record (slot(i) resolves for every i below the list's size). */
-static DbIndexRecord *indexAt(ChunkedList *records, uint32_t index) {
+static DbIndexRecord *indexAt(ChunkedList *records, u32 index) {
     return (DbIndexRecord*) ChunkedList_slot(records, index);
 }
 
 /** Exchange two index records in place. */
-static void indexSwap(ChunkedList *records, uint32_t a, uint32_t b) {
+static void indexSwap(ChunkedList *records, u32 a, u32 b) {
     DbIndexRecord *ra = indexAt(records, a);
     DbIndexRecord *rb = indexAt(records, b);
     DbIndexRecord kept = *ra;
@@ -292,9 +292,9 @@ static void indexSwap(ChunkedList *records, uint32_t a, uint32_t b) {
 }
 
 /** Restore the max-heap property below root: heapsort's only primitive. */
-static void indexSiftDown(ChunkedList *records, uint32_t root, uint32_t count) {
+static void indexSiftDown(ChunkedList *records, u32 root, u32 count) {
     while (root * 2u + 1u < count) {
-        uint32_t child = root * 2u + 1u;
+        u32 child = root * 2u + 1u;
         if (child + 1u < count &&
             (*indexAt(records, child + 1u)).key > (*indexAt(records, child)).key)
             child++;
@@ -307,10 +307,10 @@ static void indexSiftDown(ChunkedList *records, uint32_t root, uint32_t count) {
 
 /** Heapsort the records by key: O(n log n), one list, no extra allocation. */
 static void indexSort(ChunkedList *records) {
-    uint32_t count = ChunkedList_size(records);
-    for (uint32_t start = count / 2u; start > 0u; start--)
+    u32 count = ChunkedList_size(records);
+    for (u32 start = count / 2u; start > 0u; start--)
         indexSiftDown(records, start - 1u, count);
-    for (uint32_t end = count - 1u; end > 0u; end--) {
+    for (u32 end = count - 1u; end > 0u; end--) {
         indexSwap(records, 0u, end);
         indexSiftDown(records, 0u, end);
     }
@@ -319,22 +319,22 @@ static void indexSort(ChunkedList *records) {
 /** Rebuild the key-sorted records from the live row list (cold path only). */
 static bool indexRebuild(Database *self, DbEntity *entity) {
     indexDrop(entity);
-    uint32_t count = ChunkedList_size((*entity).rows);
+    u32 count = ChunkedList_size((*entity).rows);
     ChunkedList *records = ChunkedList_3(ID_DB_DATABASE_ROW,
-        (uint32_t) sizeof(DbIndexRecord), (*self).chunkBytes);
+        (u32) sizeof(DbIndexRecord), (*self).chunkBytes);
     if (records == nullptr)
         return false;
-    for (uint32_t i = 0u; i < count; i++) {
-        uint8_t *rowSlot = ChunkedList_slot((*entity).rows, i);
+    for (u32 i = 0u; i < count; i++) {
+        u8 *rowSlot = ChunkedList_slot((*entity).rows, i);
         void *row = rowSlot == nullptr ? nullptr : *((void**) rowSlot);
-        uint8_t *slot = row == nullptr ? nullptr : ChunkedList_addSlot(records);
+        u8 *slot = row == nullptr ? nullptr : ChunkedList_addSlot(records);
         if (slot == nullptr) {
             ChunkedList_free(records);
             return false;
         }
         DbIndexRecord *record = (DbIndexRecord*) slot;
-        int32_t key = 0;
-        memcpy(&key, (const uint8_t*) row + (*entity).indexOffset, sizeof(key));
+        i32 key = 0;
+        memcpy(&key, (const u8*) row + (*entity).indexOffset, sizeof(key));
         (*record).key = key;
         (*record).rowIndex = i;
         (*record).row = row;
@@ -356,8 +356,8 @@ static DbFieldSpan resolveField(const DbEntity *entity, const char *fieldName) {
         return span;
     }
     Field *matched = nullptr;
-    uint32_t fieldCount = Struct_count((*entity).schema);
-    for (uint32_t i = 0u; i < fieldCount; i++) {
+    u32 fieldCount = Struct_count((*entity).schema);
+    for (u32 i = 0u; i < fieldCount; i++) {
         Field *candidate = Struct_get((*entity).schema, i);
         const char *candidateName = Field_getName(candidate);
         char candidateFolded[REFLECT_FIELD_NAME_BYTES];
@@ -386,14 +386,14 @@ static DbFieldSpan resolveField(const DbEntity *entity, const char *fieldName) {
  * Initializes caller-provided storage and its entity registry. A zero or too-
  * small chunk budget selects the default; failure returns false.
  */
-bool Database_init(Database *self, uint32_t chunkBytes) {
+bool Database_init(Database *self, u32 chunkBytes) {
     if (self == nullptr)
         return false;
     memset(self, 0, sizeof(*self));
-    uint32_t budget = chunkBytes == 0u ? VEX_CHUNKED_BYTES_DEFAULT : chunkBytes;
+    u32 budget = chunkBytes == 0u ? VEX_CHUNKED_BYTES_DEFAULT : chunkBytes;
     if (budget < 16u)
         budget = VEX_CHUNKED_BYTES_DEFAULT;
-    (*self).entities = ChunkedList_3(ID_DB_DATABASE, (uint32_t) sizeof(DbEntity), budget);
+    (*self).entities = ChunkedList_3(ID_DB_DATABASE, (u32) sizeof(DbEntity), budget);
     if ((*self).entities == nullptr)
         return false;
     (*self).chunkBytes = budget;
@@ -406,7 +406,7 @@ bool Database_init(Database *self, uint32_t chunkBytes) {
  * Allocates and initializes a Database using the requested per-entity chunk
  * budget, returning nullptr if allocation or initialization fails.
  */
-Database *Database_1(uint32_t chunkBytes) {
+Database *Database_1(u32 chunkBytes) {
     Database *self = (Database*) Memory_alloc(TYPE_DB_DATABASE_SINGLETON, sizeof(Database));
     if (self == nullptr)
         return nullptr;
@@ -432,15 +432,15 @@ void Database_free(Database *self) {
     if (self == nullptr)
         return;
     if ((*self).entities != nullptr) {
-        uint32_t n = ChunkedList_size((*self).entities);
-        for (uint32_t i = 0u; i < n; i++) {
+        u32 n = ChunkedList_size((*self).entities);
+        for (u32 i = 0u; i < n; i++) {
             DbEntity *entity = (DbEntity*) ChunkedList_slot((*self).entities, i);
             if (entity == nullptr || (*entity).rows == nullptr)
                 continue;
             if ((*entity).owned != 0u) {
-                uint32_t rows = ChunkedList_size((*entity).rows);
-                for (uint32_t r = 0u; r < rows; r++) {
-                    uint8_t *slot = ChunkedList_slot((*entity).rows, r);
+                u32 rows = ChunkedList_size((*entity).rows);
+                for (u32 r = 0u; r < rows; r++) {
+                    u8 *slot = ChunkedList_slot((*entity).rows, r);
                     if (slot != nullptr)
                         Memory_free(*(void**) slot);
                 }
@@ -459,7 +459,7 @@ void Database_free(Database *self) {
 /**
  * Returns the allocation's runtime type id, or zero for a null Database.
  */
-uint64_t Database_kind(const Database *self) {
+u64 Database_kind(const Database *self) {
     if (self == nullptr)
         return 0u;
     return Memory_type((void*) self);
@@ -468,7 +468,7 @@ uint64_t Database_kind(const Database *self) {
 /**
  * Reports whether a non-null Database allocation has the requested type id.
  */
-bool Database_check(const Database *self, uint64_t typeId) {
+bool Database_check(const Database *self, u64 typeId) {
     if (self == nullptr)
         return false;
     return Memory_type((void*) self) == typeId;
@@ -478,7 +478,7 @@ bool Database_check(const Database *self, uint64_t typeId) {
  * Registers a borrowed reflection schema under its folded name and creates an
  * empty row list. Returns its index, or -1 with a recorded/reported error.
  */
-int32_t Database_define(Database *self, Struct *schema) {
+i32 Database_define(Database *self, Struct *schema) {
     if (self == nullptr || schema == nullptr) {
         recordError(self, DATABASE_INVALID, "define: null database or schema");
         THROW("Database_define: null database or schema");
@@ -501,7 +501,7 @@ int32_t Database_define(Database *self, Struct *schema) {
         THROW("Database_define: duplicate entity");
         return -1;
     }
-    uint8_t *slot = ChunkedList_addSlot((*self).entities);
+    u8 *slot = ChunkedList_addSlot((*self).entities);
     if (slot == nullptr) {
         recordError(self, DATABASE_EXHAUSTED, "define: entity allocation failed");
         THROW("Database_define: entity allocation failed");
@@ -510,7 +510,7 @@ int32_t Database_define(Database *self, Struct *schema) {
     DbEntity *entity = (DbEntity*) slot;
     memcpy((*entity).name, folded, strlen(folded) + 1u);
     (*entity).schema = schema;
-    (*entity).rows = ChunkedList_3(ID_DB_DATABASE_ROW, (uint32_t) sizeof(void*), (*self).chunkBytes);
+    (*entity).rows = ChunkedList_3(ID_DB_DATABASE_ROW, (u32) sizeof(void*), (*self).chunkBytes);
     if ((*entity).rows == nullptr) {
         recordError(self, DATABASE_EXHAUSTED, "define: row list allocation failed");
         THROW("Database_define: row list allocation failed");
@@ -521,14 +521,14 @@ int32_t Database_define(Database *self, Struct *schema) {
     (*entity).indexDirty = 0u;
     (*entity).indexRecords = nullptr;
     recordError(self, DATABASE_OK, "");
-    return (int32_t) (ChunkedList_size((*self).entities) - 1u);
+    return (i32) (ChunkedList_size((*self).entities) - 1u);
 }
 
 /**
  * Resolves a valid entity name to its registry index, or returns -1 when the
  * Database/name is null, malformed, or not registered.
  */
-int32_t Database_entityIndex(const Database *self, const char *entity) {
+i32 Database_entityIndex(const Database *self, const char *entity) {
     if (self == nullptr || entity == nullptr)
         return -1;
     char folded[DB_ENTITY_NAME_BYTES];
@@ -541,7 +541,7 @@ int32_t Database_entityIndex(const Database *self, const char *entity) {
  * Returns the number of registered entities, or zero for an unavailable
  * registry.
  */
-uint32_t Database_entityCount(const Database *self) {
+u32 Database_entityCount(const Database *self) {
     if (self == nullptr || (*self).entities == nullptr)
         return 0u;
     return ChunkedList_size((*self).entities);
@@ -552,10 +552,10 @@ uint32_t Database_entityCount(const Database *self) {
  * fails.
  */
 Struct *Database_schema(const Database *self, const char *entity) {
-    int32_t index = Database_entityIndex(self, entity);
+    i32 index = Database_entityIndex(self, entity);
     if (index < 0)
         return nullptr;
-    DbEntity *row = (DbEntity*) ChunkedList_slot((*self).entities, (uint32_t) index);
+    DbEntity *row = (DbEntity*) ChunkedList_slot((*self).entities, (u32) index);
     return row ? (*row).schema : nullptr;
 }
 
@@ -563,7 +563,7 @@ Struct *Database_schema(const Database *self, const char *entity) {
  * Binds a caller-owned row pointer to a live entity and returns its row index.
  * Rejections leave the row unbound and return -1 with a recorded error.
  */
-int32_t Database_insert(Database *self, const char *entity, void *row) {
+i32 Database_insert(Database *self, const char *entity, void *row) {
     if (self == nullptr || entity == nullptr || row == nullptr) {
         recordError(self, DATABASE_INVALID, "insert: null argument");
         THROW("Database_insert: null argument");
@@ -575,13 +575,13 @@ int32_t Database_insert(Database *self, const char *entity, void *row) {
         THROW("Database_insert: illegal entity name");
         return -1;
     }
-    int32_t index = findEntity(self, folded);
+    i32 index = findEntity(self, folded);
     if (index < 0) {
         recordError(self, DATABASE_ABSENT, "insert: no such entity");
         THROW("Database_insert: no such entity");
         return -1;
     }
-    DbEntity *target = (DbEntity*) ChunkedList_slot((*self).entities, (uint32_t) index);
+    DbEntity *target = (DbEntity*) ChunkedList_slot((*self).entities, (u32) index);
     if (target == nullptr || (*target).rows == nullptr) {
         recordError(self, DATABASE_ABSENT, "insert: entity unavailable");
         THROW("Database_insert: entity unavailable");
@@ -592,7 +592,7 @@ int32_t Database_insert(Database *self, const char *entity, void *row) {
         THROW("Database_insert: cannot bind a live row into a file-loaded entity");
         return -1;
     }
-    uint8_t *slot = ChunkedList_addSlot((*target).rows);
+    u8 *slot = ChunkedList_addSlot((*target).rows);
     if (slot == nullptr) {
         recordError(self, DATABASE_EXHAUSTED, "insert: row allocation failed");
         THROW("Database_insert: row allocation failed");
@@ -601,7 +601,7 @@ int32_t Database_insert(Database *self, const char *entity, void *row) {
     *((void**) slot) = row;
     (*target).indexDirty = 1u;
     recordError(self, DATABASE_OK, "");
-    return (int32_t) (ChunkedList_size((*target).rows) - 1u);
+    return (i32) (ChunkedList_size((*target).rows) - 1u);
 }
 
 /**
@@ -609,8 +609,8 @@ int32_t Database_insert(Database *self, const char *entity, void *row) {
  * or already own all its rows; rejection frees any staged copy and preserves
  * both row count and ownership mode.
  */
-int32_t Database_insertOwned(Database *self, const char *entity, const void *rowBytes,
-                             size_t rowBytesLength) {
+i32 Database_insertOwned(Database *self, const char *entity, const void *rowBytes,
+                             bytes rowBytesLength) {
     if (self == nullptr || entity == nullptr || rowBytes == nullptr) {
         recordError(self, DATABASE_INVALID, "insertOwned: null argument");
         THROW("Database_insertOwned: null argument");
@@ -622,25 +622,25 @@ int32_t Database_insertOwned(Database *self, const char *entity, const void *row
         THROW("Database_insertOwned: illegal entity name");
         return -1;
     }
-    int32_t index = findEntity(self, folded);
+    i32 index = findEntity(self, folded);
     if (index < 0) {
         recordError(self, DATABASE_ABSENT, "insertOwned: no such entity");
         THROW("Database_insertOwned: no such entity");
         return -1;
     }
-    DbEntity *target = (DbEntity*) ChunkedList_slot((*self).entities, (uint32_t) index);
+    DbEntity *target = (DbEntity*) ChunkedList_slot((*self).entities, (u32) index);
     if (target == nullptr || (*target).schema == nullptr || (*target).rows == nullptr) {
         recordError(self, DATABASE_ABSENT, "insertOwned: entity unavailable");
         THROW("Database_insertOwned: entity unavailable");
         return -1;
     }
-    uint32_t stride = Struct_getSize((*target).schema);
-    if (stride == 0u || rowBytesLength != (size_t) stride) {
+    u32 stride = Struct_getSize((*target).schema);
+    if (stride == 0u || rowBytesLength != (bytes) stride) {
         recordError(self, DATABASE_INVALID, "insertOwned: row length must equal schema stride");
         THROW("Database_insertOwned: row length does not equal schema stride");
         return -1;
     }
-    uint32_t count = ChunkedList_size((*target).rows);
+    u32 count = ChunkedList_size((*target).rows);
     if ((*target).owned == 0u && count != 0u) {
         recordError(self, DATABASE_INVALID, "insertOwned: entity already has borrowed rows");
         THROW("Database_insertOwned: cannot mix borrowed and owned rows");
@@ -653,7 +653,7 @@ int32_t Database_insertOwned(Database *self, const char *entity, const void *row
         return -1;
     }
     memcpy(copy, rowBytes, rowBytesLength);
-    uint8_t *slot = ChunkedList_addSlot((*target).rows);
+    u8 *slot = ChunkedList_addSlot((*target).rows);
     if (slot == nullptr) {
         Memory_free(copy);
         recordError(self, DATABASE_EXHAUSTED, "insertOwned: row-list allocation failed");
@@ -664,32 +664,32 @@ int32_t Database_insertOwned(Database *self, const char *entity, const void *row
     (*target).owned = 1u;
     (*target).indexDirty = 1u;
     recordError(self, DATABASE_OK, "");
-    return (int32_t) (ChunkedList_size((*target).rows) - 1u);
+    return (i32) (ChunkedList_size((*target).rows) - 1u);
 }
 
 /**
  * Returns the borrowed row pointer at an entity's index, or nullptr when the
  * entity, row list, index, or stored pointer is unavailable.
  */
-void *Database_row(const Database *self, const char *entity, uint32_t index) {
-    int32_t e = Database_entityIndex(self, entity);
+void *Database_row(const Database *self, const char *entity, u32 index) {
+    i32 e = Database_entityIndex(self, entity);
     if (e < 0)
         return nullptr;
-    DbEntity *target = (DbEntity*) ChunkedList_slot((*self).entities, (uint32_t) e);
+    DbEntity *target = (DbEntity*) ChunkedList_slot((*self).entities, (u32) e);
     if (target == nullptr || (*target).rows == nullptr)
         return nullptr;
-    uint8_t *slot = ChunkedList_slot((*target).rows, index);
+    u8 *slot = ChunkedList_slot((*target).rows, index);
     return slot ? *((void**) slot) : nullptr;
 }
 
 /**
  * Returns the number of rows bound to an entity, or zero when lookup fails.
  */
-uint32_t Database_count(const Database *self, const char *entity) {
-    int32_t e = Database_entityIndex(self, entity);
+u32 Database_count(const Database *self, const char *entity) {
+    i32 e = Database_entityIndex(self, entity);
     if (e < 0)
         return 0u;
-    DbEntity *target = (DbEntity*) ChunkedList_slot((*self).entities, (uint32_t) e);
+    DbEntity *target = (DbEntity*) ChunkedList_slot((*self).entities, (u32) e);
     return target && (*target).rows ? ChunkedList_size((*target).rows) : 0u;
 }
 
@@ -698,13 +698,13 @@ uint32_t Database_count(const Database *self, const char *entity) {
  * entities return nullptr and update the Database error state.
  */
 DatabaseResult *Database_select(Database *self, const char *entity) {
-    int32_t e = Database_entityIndex(self, entity);
+    i32 e = Database_entityIndex(self, entity);
     if (e < 0) {
         recordError(self, DATABASE_ABSENT, "select: no such entity");
         THROW("Database_select: no such entity");
         return nullptr;
     }
-    DbEntity *target = (DbEntity*) ChunkedList_slot((*self).entities, (uint32_t) e);
+    DbEntity *target = (DbEntity*) ChunkedList_slot((*self).entities, (u32) e);
     if (target == nullptr || (*target).rows == nullptr) {
         recordError(self, DATABASE_ABSENT, "select: entity unavailable");
         THROW("Database_select: entity unavailable");
@@ -717,21 +717,21 @@ DatabaseResult *Database_select(Database *self, const char *entity) {
 /** Returns a cold exact-byte equality cursor over one admitted reflected Field. */
 DatabaseResult *Database_queryEqual(Database *self, const char *entityName,
                                     const char *fieldName, const void *value,
-                                    size_t valueLength) {
+                                    bytes valueLength) {
     if (self == nullptr || entityName == nullptr || fieldName == nullptr ||
         value == nullptr || valueLength == 0u) {
         recordError(self, DATABASE_INVALID, "queryEqual: null or empty argument");
         THROW("Database_queryEqual: null or empty argument");
         return nullptr;
     }
-    int32_t entityIndex = Database_entityIndex(self, entityName);
+    i32 entityIndex = Database_entityIndex(self, entityName);
     if (entityIndex < 0) {
         recordError(self, DATABASE_ABSENT, "queryEqual: no such entity");
         THROW("Database_queryEqual: no such entity");
         return nullptr;
     }
     DbEntity *entity = (DbEntity*) ChunkedList_slot((*self).entities,
-                                                     (uint32_t) entityIndex);
+                                                     (u32) entityIndex);
     if (entity == nullptr || (*entity).schema == nullptr || (*entity).rows == nullptr) {
         recordError(self, DATABASE_ABSENT, "queryEqual: entity unavailable");
         THROW("Database_queryEqual: entity unavailable");
@@ -744,8 +744,8 @@ DatabaseResult *Database_queryEqual(Database *self, const char *entityName,
         return nullptr;
     }
     Field *matched = nullptr;
-    uint32_t fieldCount = Struct_count((*entity).schema);
-    for (uint32_t i = 0u; i < fieldCount; i++) {
+    u32 fieldCount = Struct_count((*entity).schema);
+    for (u32 i = 0u; i < fieldCount; i++) {
         Field *candidate = Struct_get((*entity).schema, i);
         const char *candidateName = Field_getName(candidate);
         char candidateFolded[REFLECT_FIELD_NAME_BYTES];
@@ -765,9 +765,9 @@ DatabaseResult *Database_queryEqual(Database *self, const char *entityName,
         THROW("Database_queryEqual: no such field");
         return nullptr;
     }
-    uint32_t rowSize = Struct_getSize((*entity).schema);
-    uint32_t offset = Field_getOffset(matched);
-    uint32_t fieldSize = Field_getSize(matched);
+    u32 rowSize = Struct_getSize((*entity).schema);
+    u32 offset = Field_getOffset(matched);
+    u32 fieldSize = Field_getSize(matched);
     if (fieldSize == 0u || valueLength != fieldSize || offset > rowSize ||
         fieldSize > rowSize - offset) {
         recordError(self, DATABASE_INVALID, "queryEqual: field span or value size is invalid");
@@ -775,15 +775,15 @@ DatabaseResult *Database_queryEqual(Database *self, const char *entityName,
         return nullptr;
     }
     ChunkedList *selected = ChunkedList_3(ID_DB_DATABASE_ROW,
-        (uint32_t) sizeof(void*), (*self).chunkBytes);
+        (u32) sizeof(void*), (*self).chunkBytes);
     if (selected == nullptr) {
         recordError(self, DATABASE_EXHAUSTED, "queryEqual: result allocation failed");
         THROW("Database_queryEqual: result allocation failed");
         return nullptr;
     }
-    uint32_t rowCount = ChunkedList_size((*entity).rows);
-    for (uint32_t i = 0u; i < rowCount; i++) {
-        uint8_t *rowSlot = ChunkedList_slot((*entity).rows, i);
+    u32 rowCount = ChunkedList_size((*entity).rows);
+    for (u32 i = 0u; i < rowCount; i++) {
+        u8 *rowSlot = ChunkedList_slot((*entity).rows, i);
         void *row = rowSlot == nullptr ? nullptr : *((void**) rowSlot);
         if (row == nullptr) {
             ChunkedList_free(selected);
@@ -791,8 +791,8 @@ DatabaseResult *Database_queryEqual(Database *self, const char *entityName,
             THROW("Database_queryEqual: null row slot");
             return nullptr;
         }
-        if (memcmp((const uint8_t*) row + offset, value, fieldSize) == 0) {
-            uint8_t *selectedSlot = ChunkedList_addSlot(selected);
+        if (memcmp((const u8*) row + offset, value, fieldSize) == 0) {
+            u8 *selectedSlot = ChunkedList_addSlot(selected);
             if (selectedSlot == nullptr) {
                 ChunkedList_free(selected);
                 recordError(self, DATABASE_EXHAUSTED, "queryEqual: result growth failed");
@@ -815,22 +815,22 @@ DatabaseResult *Database_queryEqual(Database *self, const char *entityName,
 
 /** Inclusive signed range scan for one exactly typed reflected int32 field. */
 DatabaseResult *Database_queryInt32Range(Database *self, const char *entityName,
-                                         const char *fieldName, int32_t minimum,
-                                         int32_t maximum) {
+                                         const char *fieldName, i32 minimum,
+                                         i32 maximum) {
     if (self == nullptr || entityName == nullptr || fieldName == nullptr ||
         minimum > maximum) {
         recordError(self, DATABASE_INVALID, "queryInt32Range: invalid argument or range");
         THROW("Database_queryInt32Range: invalid argument or range");
         return nullptr;
     }
-    int32_t entityIndex = Database_entityIndex(self, entityName);
+    i32 entityIndex = Database_entityIndex(self, entityName);
     if (entityIndex < 0) {
         recordError(self, DATABASE_ABSENT, "queryInt32Range: no such entity");
         THROW("Database_queryInt32Range: no such entity");
         return nullptr;
     }
     DbEntity *entity = (DbEntity*) ChunkedList_slot((*self).entities,
-                                                     (uint32_t) entityIndex);
+                                                     (u32) entityIndex);
     if (entity == nullptr || (*entity).schema == nullptr || (*entity).rows == nullptr) {
         recordError(self, DATABASE_ABSENT, "queryInt32Range: entity unavailable");
         THROW("Database_queryInt32Range: entity unavailable");
@@ -843,8 +843,8 @@ DatabaseResult *Database_queryInt32Range(Database *self, const char *entityName,
         return nullptr;
     }
     Field *matched = nullptr;
-    uint32_t fieldCount = Struct_count((*entity).schema);
-    for (uint32_t i = 0u; i < fieldCount; i++) {
+    u32 fieldCount = Struct_count((*entity).schema);
+    for (u32 i = 0u; i < fieldCount; i++) {
         Field *candidate = Struct_get((*entity).schema, i);
         const char *candidateName = Field_getName(candidate);
         char candidateFolded[REFLECT_FIELD_NAME_BYTES];
@@ -864,17 +864,17 @@ DatabaseResult *Database_queryInt32Range(Database *self, const char *entityName,
         THROW("Database_queryInt32Range: no such field");
         return nullptr;
     }
-    uint32_t rowSize = Struct_getSize((*entity).schema);
-    uint32_t offset = Field_getOffset(matched);
-    uint32_t fieldSize = Field_getSize(matched);
-    if (fieldSize != sizeof(int32_t) || offset > rowSize ||
+    u32 rowSize = Struct_getSize((*entity).schema);
+    u32 offset = Field_getOffset(matched);
+    u32 fieldSize = Field_getSize(matched);
+    if (fieldSize != sizeof(i32) || offset > rowSize ||
         fieldSize > rowSize - offset) {
         recordError(self, DATABASE_INVALID, "queryInt32Range: field is not a valid int32 span");
         THROW("Database_queryInt32Range: field is not a valid int32 span");
         return nullptr;
     }
     ChunkedList *selected = ChunkedList_3(ID_DB_DATABASE_ROW,
-        (uint32_t) sizeof(void*), (*self).chunkBytes);
+        (u32) sizeof(void*), (*self).chunkBytes);
     if (selected == nullptr) {
         recordError(self, DATABASE_EXHAUSTED, "queryInt32Range: result allocation failed");
         THROW("Database_queryInt32Range: result allocation failed");
@@ -888,21 +888,21 @@ DatabaseResult *Database_queryInt32Range(Database *self, const char *entityName,
     if (indexed && (*entity).indexDirty != 0u)
         indexed = indexRebuild(self, entity);
     if (indexed) {
-        uint32_t records = ChunkedList_size((*entity).indexRecords);
-        uint32_t low = 0u;
-        uint32_t high = records;
+        u32 records = ChunkedList_size((*entity).indexRecords);
+        u32 low = 0u;
+        u32 high = records;
         while (low < high) { // first record whose key is >= minimum
-            uint32_t mid = low + (high - low) / 2u;
+            u32 mid = low + (high - low) / 2u;
             if ((*indexAt((*entity).indexRecords, mid)).key < minimum)
                 low = mid + 1u;
             else
                 high = mid;
         }
-        for (uint32_t i = low; i < records; i++) {
+        for (u32 i = low; i < records; i++) {
             DbIndexRecord *record = indexAt((*entity).indexRecords, i);
             if ((*record).key > maximum)
                 break;
-            uint8_t *selectedSlot = ChunkedList_addSlot(selected);
+            u8 *selectedSlot = ChunkedList_addSlot(selected);
             if (selectedSlot == nullptr) {
                 ChunkedList_free(selected);
                 recordError(self, DATABASE_EXHAUSTED, "queryInt32Range: result growth failed");
@@ -912,9 +912,9 @@ DatabaseResult *Database_queryInt32Range(Database *self, const char *entityName,
             *((void**) selectedSlot) = (*record).row;
         }
     } else {
-        uint32_t rowCount = ChunkedList_size((*entity).rows);
-        for (uint32_t i = 0u; i < rowCount; i++) {
-            uint8_t *rowSlot = ChunkedList_slot((*entity).rows, i);
+        u32 rowCount = ChunkedList_size((*entity).rows);
+        for (u32 i = 0u; i < rowCount; i++) {
+            u8 *rowSlot = ChunkedList_slot((*entity).rows, i);
             void *row = rowSlot == nullptr ? nullptr : *((void**) rowSlot);
             if (row == nullptr) {
                 ChunkedList_free(selected);
@@ -922,10 +922,10 @@ DatabaseResult *Database_queryInt32Range(Database *self, const char *entityName,
                 THROW("Database_queryInt32Range: null row slot");
                 return nullptr;
             }
-            int32_t value = 0;
-            memcpy(&value, (const uint8_t*) row + offset, sizeof(value));
+            i32 value = 0;
+            memcpy(&value, (const u8*) row + offset, sizeof(value));
             if (value >= minimum && value <= maximum) {
-                uint8_t *selectedSlot = ChunkedList_addSlot(selected);
+                u8 *selectedSlot = ChunkedList_addSlot(selected);
                 if (selectedSlot == nullptr) {
                     ChunkedList_free(selected);
                     recordError(self, DATABASE_EXHAUSTED, "queryInt32Range: result growth failed");
@@ -951,12 +951,12 @@ DatabaseResult *Database_queryInt32Range(Database *self, const char *entityName,
 
 /**
  * Declares and builds the int32 index for one field of an entity. The Field must
- * carry REFLECT_FIELD_INDEXED and span exactly sizeof(int32_t) inside the row
+ * carry REFLECT_FIELD_INDEXED and span exactly sizeof(i32) inside the row
  * stride, so the index is opt-in per field per entity and the schema stays the
  * single declaration point. Cold path. The definition outlives a row-list
  * replacement (a load drops the records and the next query rebuilds them).
  */
-int32_t Database_indexBuild(Database *self, const char *entityName, const char *fieldName) {
+i32 Database_indexBuild(Database *self, const char *entityName, const char *fieldName) {
     if (self == nullptr || entityName == nullptr || fieldName == nullptr) {
         recordError(self, DATABASE_INVALID, "indexBuild: null or empty argument");
         THROW("Database_indexBuild: null or empty argument");
@@ -970,13 +970,13 @@ int32_t Database_indexBuild(Database *self, const char *entityName, const char *
         THROW("Database_indexBuild: invalid or unknown field");
         return DATABASE_INVALID;
     }
-    int32_t entityIndex = findEntity(self, foldedEntity);
+    i32 entityIndex = findEntity(self, foldedEntity);
     if (entityIndex < 0) {
         recordError(self, DATABASE_ABSENT, "indexBuild: no such entity");
         THROW("Database_indexBuild: no such entity");
         return DATABASE_ABSENT;
     }
-    DbEntity *entity = (DbEntity*) ChunkedList_slot((*self).entities, (uint32_t) entityIndex);
+    DbEntity *entity = (DbEntity*) ChunkedList_slot((*self).entities, (u32) entityIndex);
     if (entity == nullptr || (*entity).schema == nullptr || (*entity).rows == nullptr) {
         recordError(self, DATABASE_ABSENT, "indexBuild: no such entity");
         THROW("Database_indexBuild: no such entity");
@@ -988,8 +988,8 @@ int32_t Database_indexBuild(Database *self, const char *entityName, const char *
         THROW("Database_indexBuild: invalid or unknown field");
         return span.code;
     }
-    uint32_t rowSize = Struct_getSize((*entity).schema);
-    if (!Field_isIndexed(span.field) || span.size != sizeof(int32_t) ||
+    u32 rowSize = Struct_getSize((*entity).schema);
+    if (!Field_isIndexed(span.field) || span.size != sizeof(i32) ||
         span.offset > rowSize || span.size > rowSize - span.offset) {
         recordError(self, DATABASE_INVALID, "indexBuild: field is not a declared int32 index");
         THROW("Database_indexBuild: field is not a declared int32 index");
@@ -1021,10 +1021,10 @@ bool Database_indexed(const Database *self, const char *entityName, const char *
     if (!VariableSlot_foldName(entityName, foldedEntity) ||
         !VariableSlot_foldName(fieldName, foldedField))
         return false;
-    int32_t entityIndex = findEntity(self, foldedEntity);
+    i32 entityIndex = findEntity(self, foldedEntity);
     if (entityIndex < 0)
         return false;
-    DbEntity *entity = (DbEntity*) ChunkedList_slot((*self).entities, (uint32_t) entityIndex);
+    DbEntity *entity = (DbEntity*) ChunkedList_slot((*self).entities, (u32) entityIndex);
     if (entity == nullptr || (*entity).indexField[0] == '\0')
         return false;
     return strcmp((*entity).indexField, foldedField) == 0;
@@ -1044,14 +1044,14 @@ DatabaseFieldSpan Database_fieldSpan(const Database *self, const char *entityNam
         THROW("Database_fieldSpan: null argument");
         return span;
     }
-    int32_t index = Database_entityIndex(self, entityName);
+    i32 index = Database_entityIndex(self, entityName);
     if (index < 0) {
         span.code = DATABASE_ABSENT;
         THROW("Database_fieldSpan: no such entity");
         return span;
     }
     const DbEntity *entity = (const DbEntity*) ChunkedList_slot((*self).entities,
-                                                               (uint32_t) index);
+                                                               (u32) index);
     if (entity == nullptr || (*entity).schema == nullptr) {
         span.code = DATABASE_ABSENT;
         THROW("Database_fieldSpan: no such entity");
@@ -1064,7 +1064,7 @@ DatabaseFieldSpan Database_fieldSpan(const Database *self, const char *entityNam
         return span;
     }
     // Never hand back a span that leaves the row: the caller will read it.
-    uint32_t stride = Struct_getSize((*entity).schema);
+    u32 stride = Struct_getSize((*entity).schema);
     if (resolved.size == 0u || resolved.offset > stride ||
         resolved.size > stride - resolved.offset) {
         span.code = DATABASE_INVALID;
@@ -1082,7 +1082,7 @@ DatabaseFieldSpan Database_fieldSpan(const Database *self, const char *entityNam
 /**
  * Returns the latest Database error code, using DATABASE_INVALID for nullptr.
  */
-int32_t Database_errorCode(const Database *self) {
+i32 Database_errorCode(const Database *self) {
     return self ? (*self).lastCode : DATABASE_INVALID;
 }
 
@@ -1090,11 +1090,11 @@ int32_t Database_errorCode(const Database *self) {
  * Copies the last error text into a bounded destination and returns copied
  * bytes, or -1 for invalid arguments; truncation is NUL-terminated.
  */
-int Database_lastError(const Database *self, char *out, size_t outCap) {
+int Database_lastError(const Database *self, char *out, bytes outCap) {
     if (self == nullptr || out == nullptr || outCap == 0u)
         return -1;
-    size_t len = strlen((*self).lastError);
-    size_t copy = len < outCap - 1u ? len : outCap - 1u;
+    bytes len = strlen((*self).lastError);
+    bytes copy = len < outCap - 1u ? len : outCap - 1u;
     memcpy(out, (*self).lastError, copy);
     out[copy] = '\0';
     return (int) copy;
@@ -1104,7 +1104,7 @@ int Database_lastError(const Database *self, char *out, size_t outCap) {
  * Maps a Database error code to static human-readable text, including unknown
  * values.
  */
-const char *Database_errorText(int32_t code) {
+const char *Database_errorText(i32 code) {
     switch (code) {
         case DATABASE_OK:        return "ok";
         case DATABASE_INVALID:   return "invalid argument";
@@ -1129,7 +1129,7 @@ const char *Database_errorText(int32_t code) {
 // byte[] right-to-the-point is more native than byte-swap machinery and needs
 // no complication. Every supported host is little-endian (Apple Silicon arm64
 // floor; Windows x86_64), so there is no cross-endian peer to serve. Values are
-// raw uint8_t[] spans — nothing is encoded as text. toString() is a cold
+// raw u8[] spans — nothing is encoded as text. toString() is a cold
 // converter for humans, never a storage format.
 
 // File header (64 Bytes). A CRC32 of the payload (every byte between the header
@@ -1137,20 +1137,20 @@ const char *Database_errorText(int32_t code) {
 // whole file before mutating the registry.
 typedef struct VexDbHeader {
     char magic[8];         // "VEXDB01\0"
-    uint32_t version;      // VEX_DB_VERSION
-    uint32_t entityCount;  // entity records that follow
-    uint64_t rowCount;     // total rows across entities
-    uint32_t reserved0;
-    uint32_t reserved1;
-    uint8_t pad[32];       // to 64
+    u32 version;      // VEX_DB_VERSION
+    u32 entityCount;  // entity records that follow
+    u64 rowCount;     // total rows across entities
+    u32 reserved0;
+    u32 reserved1;
+    u8 pad[32];       // to 64
 } VexDbHeader;
 _Static_assert(sizeof(VexDbHeader) == VEX_DB_HEADER_BYTES, "VexDbHeader must stay 64 Bytes");
 
 // One entity record (32 Bytes): rowCount * stride raw row Bytes follow it.
 typedef struct VexDbEntity {
     char name[DB_ENTITY_NAME_BYTES]; // folded entity name
-    uint32_t stride;                 // entity row byte stride
-    uint32_t rowCount;               // rows that follow
+    u32 stride;                 // entity row byte stride
+    u32 rowCount;               // rows that follow
 } VexDbEntity;
 _Static_assert(sizeof(VexDbEntity) == 32u, "VexDbEntity must stay 32 Bytes");
 
@@ -1158,36 +1158,36 @@ _Static_assert(sizeof(VexDbEntity) == 32u, "VexDbEntity must stay 32 Bytes");
 // snapshot. Data pages are durable before this record is replaced.
 typedef struct DatabaseStoreRoot {
     char magic[8];
-    uint32_t version;
-    uint32_t firstPage;
-    uint64_t length;
-    uint32_t crc;
-    uint32_t reserved;
+    u32 version;
+    u32 firstPage;
+    u64 length;
+    u32 crc;
+    u32 reserved;
 } DatabaseStoreRoot;
 _Static_assert(sizeof(DatabaseStoreRoot) == 32u, "DatabaseStoreRoot must stay 32 Bytes");
 
 typedef struct DatabaseStoreLink {
-    uint32_t nextPage;
-    uint32_t chunkBytes;
-    uint64_t offset;
+    u32 nextPage;
+    u32 chunkBytes;
+    u64 offset;
 } DatabaseStoreLink;
 _Static_assert(sizeof(DatabaseStoreLink) == 16u, "DatabaseStoreLink must stay 16 Bytes");
 
 typedef struct DatabaseStoreCatalog {
     char magic[8];
-    uint32_t version;
-    uint32_t entityCount;
+    u32 version;
+    u32 entityCount;
 } DatabaseStoreCatalog;
 _Static_assert(sizeof(DatabaseStoreCatalog) == 16u,
                "DatabaseStoreCatalog must stay 16 Bytes");
 
 typedef struct DatabaseStoreEntity {
     char name[DB_ENTITY_NAME_BYTES];
-    uint32_t stride;
-    uint32_t rowCount;
+    u32 stride;
+    u32 rowCount;
     char indexField[DB_ENTITY_NAME_BYTES]; // folded indexed field name ("" = none)
-    uint32_t indexOffset;                  // in-row byte offset of the indexed span
-    uint32_t indexCount;                   // persisted index records after the rows
+    u32 indexOffset;                  // in-row byte offset of the indexed span
+    u32 indexCount;                   // persisted index records after the rows
 } DatabaseStoreEntity;
 _Static_assert(sizeof(DatabaseStoreEntity) == 64u,
                "DatabaseStoreEntity must stay 64 Bytes");
@@ -1195,8 +1195,8 @@ _Static_assert(sizeof(DatabaseStoreEntity) == 64u,
 // One persisted index record: the key and the position of the row carrying it.
 // The rowIndex, not an address, is what makes the records reload-addressable.
 typedef struct DatabaseStoreIndexRecord {
-    int32_t key;
-    uint32_t rowIndex;
+    i32 key;
+    u32 rowIndex;
 } DatabaseStoreIndexRecord;
 _Static_assert(sizeof(DatabaseStoreIndexRecord) == 8u,
                "DatabaseStoreIndexRecord must stay 8 Bytes");
@@ -1210,14 +1210,14 @@ _Static_assert(sizeof(DatabaseStoreIndexRecord) == 8u,
  * Writes the full byte span, retrying short writes; returns false on a
  * non-progressing or failed write.
  */
-static bool writeAll(File *file, const void *src, size_t length) {
-    const uint8_t *p = (const uint8_t*) src;
-    size_t done = 0u;
+static bool writeAll(File *file, const void *src, bytes length) {
+    const u8 *p = (const u8*) src;
+    bytes done = 0u;
     while (done < length) {
         int64_t n = File_write(file, p + done, (int64_t) (length - done));
         if (n <= 0)
             return false;
-        done += (size_t) n;
+        done += (bytes) n;
     }
     return true;
 }
@@ -1226,14 +1226,14 @@ static bool writeAll(File *file, const void *src, size_t length) {
  * Reads the requested byte span, retrying short reads; returns false on EOF or
  * a failed read before completion.
  */
-static bool readAll(File *file, void *dest, size_t length) {
-    uint8_t *p = (uint8_t*) dest;
-    size_t done = 0u;
+static bool readAll(File *file, void *dest, bytes length) {
+    u8 *p = (u8*) dest;
+    bytes done = 0u;
     while (done < length) {
         int64_t n = File_read(file, p + done, (int64_t) (length - done));
         if (n <= 0)
             return false;
-        done += (size_t) n;
+        done += (bytes) n;
     }
     return true;
 }
@@ -1252,10 +1252,10 @@ static bool syncFile(File *file) {
 }
 
 /** Checks payload records against registered, empty entities without mutation. */
-static int32_t loadPayload(Database *self, const uint8_t *payload, size_t length,
-                           uint32_t entityCount) {
-    size_t offset = 0u;
-    for (uint32_t e = 0u; e < entityCount; e++) {
+static i32 loadPayload(Database *self, const u8 *payload, bytes length,
+                           u32 entityCount) {
+    bytes offset = 0u;
+    for (u32 e = 0u; e < entityCount; e++) {
         if (offset > length || length - offset < sizeof(VexDbEntity))
             return DATABASE_INVALID;
         VexDbEntity record;
@@ -1265,28 +1265,28 @@ static int32_t loadPayload(Database *self, const uint8_t *payload, size_t length
             return DATABASE_INVALID;
         if (memchr(record.name, '\0', sizeof(record.name)) == nullptr)
             return DATABASE_INVALID;
-        size_t rowBytes = (size_t) record.stride * (size_t) record.rowCount;
+        bytes rowBytes = (bytes) record.stride * (bytes) record.rowCount;
         if (rowBytes > length || offset > length - rowBytes)
             return DATABASE_INVALID;
-        int32_t index = Database_entityIndex(self, record.name);
+        i32 index = Database_entityIndex(self, record.name);
         if (index < 0)
             return DATABASE_ABSENT;
-        DbEntity *entity = (DbEntity*) ChunkedList_slot((*self).entities, (uint32_t) index);
+        DbEntity *entity = (DbEntity*) ChunkedList_slot((*self).entities, (u32) index);
         if (entity == nullptr || (*entity).schema == nullptr || (*entity).rows == nullptr)
             return DATABASE_ABSENT;
         if (Struct_getSize((*entity).schema) != record.stride)
             return DATABASE_INVALID;
         if (ChunkedList_size((*entity).rows) != 0u)
             return DATABASE_DUPLICATE;
-        for (uint32_t prior = 0u; prior < e; prior++) {
-            size_t previousOffset = 0u;
+        for (u32 prior = 0u; prior < e; prior++) {
+            bytes previousOffset = 0u;
             VexDbEntity previous = {0};
-            for (uint32_t p = 0u; p <= prior; p++) {
+            for (u32 p = 0u; p <= prior; p++) {
                 memcpy(&previous, payload + previousOffset, sizeof(previous));
                 if (p == prior)
                     break;
                 previousOffset += sizeof(previous) +
-                    (size_t) previous.stride * (size_t) previous.rowCount;
+                    (bytes) previous.stride * (bytes) previous.rowCount;
             }
             if (memchr(previous.name, '\0', sizeof(previous.name)) == nullptr)
                 return DATABASE_INVALID;
@@ -1302,9 +1302,9 @@ static int32_t loadPayload(Database *self, const uint8_t *payload, size_t length
 static void freeOwnedRows(ChunkedList *rows) {
     if (rows == nullptr)
         return;
-    uint32_t count = ChunkedList_size(rows);
-    for (uint32_t i = 0u; i < count; i++) {
-        uint8_t *slot = ChunkedList_slot(rows, i);
+    u32 count = ChunkedList_size(rows);
+    for (u32 i = 0u; i < count; i++) {
+        u8 *slot = ChunkedList_slot(rows, i);
         if (slot != nullptr)
             Memory_free(*(void**) slot);
     }
@@ -1315,40 +1315,40 @@ static void freeOwnedRows(ChunkedList *rows) {
  * Builds every entity's rows off to the side, then swaps all lists only after
  * every allocation succeeds. Rejection leaves every target entity untouched.
  */
-static int32_t loadCommit(Database *self, const uint8_t *payload, size_t length,
-                          uint32_t entityCount) {
+static i32 loadCommit(Database *self, const u8 *payload, bytes length,
+                          u32 entityCount) {
     if (entityCount == 0u)
         return length == 0u ? DATABASE_OK : DATABASE_INVALID;
-    if ((size_t) entityCount > SIZE_MAX / sizeof(DbLoadStage))
+    if ((bytes) entityCount > SIZE_MAX / sizeof(DbLoadStage))
         return DATABASE_EXHAUSTED;
-    size_t stageBytes = (size_t) entityCount * sizeof(DbLoadStage);
+    bytes stageBytes = (bytes) entityCount * sizeof(DbLoadStage);
     DbLoadStage *stages = (DbLoadStage*) Memory_alloc(0u, stageBytes);
     if (stages == nullptr)
         return DATABASE_EXHAUSTED;
     memset(stages, 0, stageBytes);
 
-    int32_t status = DATABASE_OK;
-    uint32_t staged = 0u;
-    size_t offset = 0u;
-    for (uint32_t e = 0u; e < entityCount && status == DATABASE_OK; e++) {
+    i32 status = DATABASE_OK;
+    u32 staged = 0u;
+    bytes offset = 0u;
+    for (u32 e = 0u; e < entityCount && status == DATABASE_OK; e++) {
         VexDbEntity record;
         memcpy(&record, payload + offset, sizeof(record));
         offset += sizeof(record);
-        int32_t index = Database_entityIndex(self, record.name);
+        i32 index = Database_entityIndex(self, record.name);
         DbEntity *entity = index < 0 ? nullptr : (DbEntity*) ChunkedList_slot(
-            (*self).entities, (uint32_t) index);
+            (*self).entities, (u32) index);
         if (entity == nullptr) {
             status = DATABASE_ABSENT;
             break;
         }
-        for (uint32_t p = 0u; p < staged; p++)
+        for (u32 p = 0u; p < staged; p++)
             if (stages[p].entity == entity)
                 status = DATABASE_DUPLICATE;
         if (status != DATABASE_OK)
             break;
 
         ChunkedList *rows = ChunkedList_3(ID_DB_DATABASE_ROW,
-            (uint32_t) sizeof(void*), (*self).chunkBytes);
+            (u32) sizeof(void*), (*self).chunkBytes);
         if (rows == nullptr) {
             status = DATABASE_EXHAUSTED;
             break;
@@ -1360,14 +1360,14 @@ static int32_t loadCommit(Database *self, const uint8_t *payload, size_t length,
             status = DATABASE_EXHAUSTED;
             break;
         }
-        for (uint32_t r = 0u; r < record.rowCount; r++) {
+        for (u32 r = 0u; r < record.rowCount; r++) {
             void *copy = Memory_alloc(TYPE_DB_DATABASE_ROW_SINGLETON, record.stride);
             if (copy == nullptr) {
                 status = DATABASE_EXHAUSTED;
                 break;
             }
-            memcpy(copy, payload + offset + (size_t) r * record.stride, record.stride);
-            uint8_t *slot = ChunkedList_addSlot(rows);
+            memcpy(copy, payload + offset + (bytes) r * record.stride, record.stride);
+            u8 *slot = ChunkedList_addSlot(rows);
             if (slot == nullptr) {
                 Memory_free(copy);
                 status = DATABASE_EXHAUSTED;
@@ -1375,13 +1375,13 @@ static int32_t loadCommit(Database *self, const uint8_t *payload, size_t length,
             }
             *((void**) slot) = copy;
         }
-        offset += (size_t) record.stride * (size_t) record.rowCount;
+        offset += (bytes) record.stride * (bytes) record.rowCount;
     }
     if (status == DATABASE_OK && offset != length)
         status = DATABASE_INVALID;
 
     if (status == DATABASE_OK) {
-        for (uint32_t i = 0u; i < staged; i++) {
+        for (u32 i = 0u; i < staged; i++) {
             DbEntity *entity = stages[i].entity;
             ChunkedList *oldRows = (*entity).rows;
             (*entity).rows = stages[i].rows;
@@ -1403,7 +1403,7 @@ static int32_t loadCommit(Database *self, const uint8_t *payload, size_t length,
             }
         }
     }
-    for (uint32_t i = 0u; i < staged; i++) {
+    for (u32 i = 0u; i < staged; i++) {
         freeOwnedRows(stages[i].rows);
         if (stages[i].indexRecords != nullptr)
             ChunkedList_free(stages[i].indexRecords);
@@ -1416,15 +1416,15 @@ static int32_t loadCommit(Database *self, const uint8_t *payload, size_t length,
  * Writes a CRC-protected native-endian snapshot to a temporary sibling, syncs
  * it, then renames it over the destination; failures preserve the old file.
  */
-int32_t Database_save(Database *self, const char *path) {
+i32 Database_save(Database *self, const char *path) {
     if (self == nullptr || path == nullptr) {
         recordError(self, DATABASE_INVALID, "save: null database or path");
         THROW("Database_save: null database or path");
         return DATABASE_INVALID;
     }
-    uint32_t entities = Database_entityCount(self);
-    uint64_t rowTotal = 0u;
-    for (uint32_t i = 0u; i < entities; i++) {
+    u32 entities = Database_entityCount(self);
+    u64 rowTotal = 0u;
+    for (u32 i = 0u; i < entities; i++) {
         DbEntity *entity = (DbEntity*) ChunkedList_slot((*self).entities, i);
         if (entity == nullptr || (*entity).schema == nullptr || Struct_getSize((*entity).schema) == 0u) {
             recordError(self, DATABASE_INVALID, "save: entity has no row stride");
@@ -1438,7 +1438,7 @@ int32_t Database_save(Database *self, const char *path) {
     // snapshot intact; the destination is only ever the old or the new file.
     char tmp[FILE_PATH_MAX + 32];
     int tmpLen = snprintf(tmp, sizeof(tmp), "%s.%ld.tmp", path, (long) getpid());
-    if (tmpLen < 0 || (size_t) tmpLen >= sizeof(tmp)) {
+    if (tmpLen < 0 || (bytes) tmpLen >= sizeof(tmp)) {
         recordError(self, DATABASE_INVALID, "save: path too long");
         THROW("Database_save: path too long");
         return DATABASE_INVALID;
@@ -1455,12 +1455,12 @@ int32_t Database_save(Database *self, const char *path) {
     header.version = VEX_DB_VERSION;
     header.entityCount = entities;
     header.rowCount = rowTotal;
-    uint32_t crc = CRC32_SEED;
+    u32 crc = CRC32_SEED;
     bool ok = writeAll(file, &header, sizeof(header));
-    for (uint32_t i = 0u; ok && i < entities; i++) {
+    for (u32 i = 0u; ok && i < entities; i++) {
         DbEntity *entity = (DbEntity*) ChunkedList_slot((*self).entities, i);
-        uint32_t stride = Struct_getSize((*entity).schema);
-        uint32_t count = (*entity).rows ? ChunkedList_size((*entity).rows) : 0u;
+        u32 stride = Struct_getSize((*entity).schema);
+        u32 count = (*entity).rows ? ChunkedList_size((*entity).rows) : 0u;
         VexDbEntity record;
         memset(&record, 0, sizeof(record));
         memcpy(record.name, (*entity).name, DB_ENTITY_NAME_BYTES);
@@ -1468,8 +1468,8 @@ int32_t Database_save(Database *self, const char *path) {
         record.rowCount = count;
         ok = writeAll(file, &record, sizeof(record));
         crc = Crc32_update(crc, &record, sizeof(record));
-        for (uint32_t r = 0u; ok && r < count; r++) {
-            uint8_t *slot = ChunkedList_slot((*entity).rows, r);
+        for (u32 r = 0u; ok && r < count; r++) {
+            u8 *slot = ChunkedList_slot((*entity).rows, r);
             void *row = slot ? *(void**) slot : nullptr;
             if (row == nullptr) {
                 ok = false;
@@ -1479,7 +1479,7 @@ int32_t Database_save(Database *self, const char *path) {
             crc = Crc32_update(crc, row, stride);
         }
     }
-    uint32_t trailer = Crc32_finalize(crc);
+    u32 trailer = Crc32_finalize(crc);
     if (ok)
         ok = writeAll(file, &trailer, VEX_DB_TRAILER_BYTES);
     if (ok)
@@ -1505,7 +1505,7 @@ int32_t Database_save(Database *self, const char *path) {
  * Validates a snapshot header, payload checksum, registered schemas, and empty
  * target entities before loading rows as Database-owned arena allocations.
  */
-int32_t Database_load(Database *self, const char *path) {
+i32 Database_load(Database *self, const char *path) {
     if (self == nullptr || path == nullptr) {
         recordError(self, DATABASE_INVALID, "load: null database or path");
         THROW("Database_load: null database or path");
@@ -1534,16 +1534,16 @@ int32_t Database_load(Database *self, const char *path) {
         THROW("Database_load: truncated file");
         return DATABASE_INVALID;
     }
-    uint8_t *payload = nullptr;
+    u8 *payload = nullptr;
     if (payloadLen > 0) {
-        payload = (uint8_t*) Memory_alloc(0u, (size_t) payloadLen);
+        payload = (u8*) Memory_alloc(0u, (bytes) payloadLen);
         if (payload == nullptr) {
             File_close(file);
             recordError(self, DATABASE_EXHAUSTED, "load: payload allocation failed");
             THROW("Database_load: payload allocation failed");
             return DATABASE_EXHAUSTED;
         }
-        if (!readAll(file, payload, (size_t) payloadLen)) {
+        if (!readAll(file, payload, (bytes) payloadLen)) {
             Memory_free(payload);
             File_close(file);
             recordError(self, DATABASE_INVALID, "load: payload read failed");
@@ -1551,7 +1551,7 @@ int32_t Database_load(Database *self, const char *path) {
             return DATABASE_INVALID;
         }
     }
-    uint32_t trailer = 0u;
+    u32 trailer = 0u;
     bool haveTrailer = readAll(file, &trailer, VEX_DB_TRAILER_BYTES);
     File_close(file);
     if (!haveTrailer) {
@@ -1561,7 +1561,7 @@ int32_t Database_load(Database *self, const char *path) {
         THROW("Database_load: missing checksum");
         return DATABASE_INVALID;
     }
-    uint32_t crc = Crc32_finalize(Crc32_update(CRC32_SEED, payload, (size_t) payloadLen));
+    u32 crc = Crc32_finalize(Crc32_update(CRC32_SEED, payload, (bytes) payloadLen));
     if (crc != trailer) {
         if (payload)
             Memory_free(payload);
@@ -1569,9 +1569,9 @@ int32_t Database_load(Database *self, const char *path) {
         THROW("Database_load: checksum mismatch");
         return DATABASE_INVALID;
     }
-    int32_t status = loadPayload(self, payload, (size_t) payloadLen, header.entityCount);
+    i32 status = loadPayload(self, payload, (bytes) payloadLen, header.entityCount);
     if (status == DATABASE_OK)
-        status = loadCommit(self, payload, (size_t) payloadLen, header.entityCount);
+        status = loadCommit(self, payload, (bytes) payloadLen, header.entityCount);
     if (payload)
         Memory_free(payload);
     if (status != DATABASE_OK) {
@@ -1584,20 +1584,20 @@ int32_t Database_load(Database *self, const char *path) {
 }
 
 /** Serializes an explicit reflected catalog followed by entity row spans. */
-static uint8_t *databaseStoreCatalogBytes(Database *self, size_t *outLength) {
+static u8 *databaseStoreCatalogBytes(Database *self, bytes *outLength) {
     if (outLength != nullptr)
         *outLength = 0u;
-    uint32_t entityCount = Database_entityCount(self);
-    size_t length = sizeof(DatabaseStoreCatalog);
-    for (uint32_t e = 0u; e < entityCount; e++) {
+    u32 entityCount = Database_entityCount(self);
+    bytes length = sizeof(DatabaseStoreCatalog);
+    for (u32 e = 0u; e < entityCount; e++) {
         DbEntity *entity = (DbEntity*) ChunkedList_slot((*self).entities, e);
         if (entity == nullptr || (*entity).schema == nullptr || (*entity).rows == nullptr)
             return nullptr;
-        uint32_t stride = Struct_getSize((*entity).schema);
-        uint32_t count = ChunkedList_size((*entity).rows);
-        if (stride == 0u || (size_t) count > (SIZE_MAX - sizeof(DatabaseStoreEntity)) / stride)
+        u32 stride = Struct_getSize((*entity).schema);
+        u32 count = ChunkedList_size((*entity).rows);
+        if (stride == 0u || (bytes) count > (SIZE_MAX - sizeof(DatabaseStoreEntity)) / stride)
             return nullptr;
-        size_t rowBytes = (size_t) count * stride;
+        bytes rowBytes = (bytes) count * stride;
         if ((*entity).indexField[0] != '\0') {
             // A declared index is refreshed here so the image never carries stale
             // keys; a refresh failure fails the save instead of dropping quietly.
@@ -1607,16 +1607,16 @@ static uint8_t *databaseStoreCatalogBytes(Database *self, size_t *outLength) {
             if (ChunkedList_size((*entity).indexRecords) != count)
                 return nullptr; // an index must cover every row
         }
-        size_t indexBytes = (*entity).indexField[0] == '\0' ? 0u
-            : (size_t) count * sizeof(DatabaseStoreIndexRecord);
+        bytes indexBytes = (*entity).indexField[0] == '\0' ? 0u
+            : (bytes) count * sizeof(DatabaseStoreIndexRecord);
         if (rowBytes > SIZE_MAX - indexBytes - sizeof(DatabaseStoreEntity))
             return nullptr;
-        size_t region = sizeof(DatabaseStoreEntity) + rowBytes + indexBytes;
+        bytes region = sizeof(DatabaseStoreEntity) + rowBytes + indexBytes;
         if (length > SIZE_MAX - region)
             return nullptr;
         length += region;
     }
-    uint8_t *bytes = (uint8_t*) Memory_alloc(0u, length);
+    u8 *bytes = (u8*) Memory_alloc(0u, length);
     if (bytes == nullptr)
         return nullptr;
     DatabaseStoreCatalog catalog;
@@ -1625,12 +1625,12 @@ static uint8_t *databaseStoreCatalogBytes(Database *self, size_t *outLength) {
     catalog.version = DATABASE_STORE_VERSION;
     catalog.entityCount = entityCount;
     memcpy(bytes, &catalog, sizeof(catalog));
-    size_t offset = sizeof(catalog);
-    for (uint32_t e = 0u; e < entityCount; e++) {
+    bytes offset = sizeof(catalog);
+    for (u32 e = 0u; e < entityCount; e++) {
         DbEntity *entity = (DbEntity*) ChunkedList_slot((*self).entities, e);
-        uint32_t stride = Struct_getSize((*entity).schema);
-        uint32_t count = ChunkedList_size((*entity).rows);
-        uint32_t indexCount = 0u;
+        u32 stride = Struct_getSize((*entity).schema);
+        u32 count = ChunkedList_size((*entity).rows);
+        u32 indexCount = 0u;
         if ((*entity).indexField[0] != '\0') {
             if (((*entity).indexRecords == nullptr || (*entity).indexDirty != 0u) &&
                 !indexRebuild(self, entity)) {
@@ -1653,8 +1653,8 @@ static uint8_t *databaseStoreCatalogBytes(Database *self, size_t *outLength) {
         record.indexCount = indexCount;
         memcpy(bytes + offset, &record, sizeof(record));
         offset += sizeof(record);
-        for (uint32_t r = 0u; r < count; r++) {
-            uint8_t *slot = ChunkedList_slot((*entity).rows, r);
+        for (u32 r = 0u; r < count; r++) {
+            u8 *slot = ChunkedList_slot((*entity).rows, r);
             void *row = slot == nullptr ? nullptr : *((void**) slot);
             if (row == nullptr) {
                 Memory_free(bytes);
@@ -1663,7 +1663,7 @@ static uint8_t *databaseStoreCatalogBytes(Database *self, size_t *outLength) {
             memcpy(bytes + offset, row, stride);
             offset += stride;
         }
-        for (uint32_t r = 0u; r < indexCount; r++) {
+        for (u32 r = 0u; r < indexCount; r++) {
             DbIndexRecord *source = indexAt((*entity).indexRecords, r);
             DatabaseStoreIndexRecord entry;
             entry.key = (*source).key;
@@ -1678,10 +1678,10 @@ static uint8_t *databaseStoreCatalogBytes(Database *self, size_t *outLength) {
 }
 
 /** Reads and validates the fixed catalog publication point. */
-static bool databaseStoreReadRoot(Store *store, uint8_t *pageBytes,
+static bool databaseStoreReadRoot(Store *store, u8 *pageBytes,
                                   DatabaseStoreRoot *outRoot) {
-    uint32_t length = 0u;
-    uint32_t kind = 0u;
+    u32 length = 0u;
+    u32 kind = 0u;
     bool truncated = false;
     StoreCode code = Store_page_read(store, DATABASE_STORE_ROOT_ID, pageBytes,
         Store_pageSize(store), &length, &kind, &truncated);
@@ -1696,8 +1696,8 @@ static bool databaseStoreReadRoot(Store *store, uint8_t *pageBytes,
 /** Ensures a fresh Store has the fixed, empty root page at logical page id one. */
 static bool databaseStoreEnsureRoot(Store *store) {
     if (Store_pageCount(store) != 0u) {
-        uint32_t pageSize = Store_pageSize(store);
-        uint8_t *pageBytes = (uint8_t*) Memory_alloc(0u, pageSize);
+        u32 pageSize = Store_pageSize(store);
+        u8 *pageBytes = (u8*) Memory_alloc(0u, pageSize);
         if (pageBytes == nullptr)
             return false;
         DatabaseStoreRoot existing;
@@ -1709,42 +1709,42 @@ static bool databaseStoreEnsureRoot(Store *store) {
     memset(&root, 0, sizeof(root));
     memcpy(root.magic, DATABASE_STORE_ROOT_MAGIC, 8u);
     root.version = DATABASE_STORE_VERSION;
-    uint32_t pageId = 0u;
-    return Store_add(store, PAGE_KIND_CATALOG, (const uint8_t*) &root,
-                     (uint32_t) sizeof(root), &pageId) == STORE_OK &&
+    u32 pageId = 0u;
+    return Store_add(store, PAGE_KIND_CATALOG, (const u8*) &root,
+                     (u32) sizeof(root), &pageId) == STORE_OK &&
         pageId == DATABASE_STORE_ROOT_ID;
 }
 
 /** Validates a Store catalog and atomically publishes owned row lists. */
-static int32_t databaseStoreLoadCommit(Database *self, const uint8_t *bytes,
-                                       size_t length) {
+static i32 databaseStoreLoadCommit(Database *self, const u8 *bytes,
+                                       bytes length) {
     if (length < sizeof(DatabaseStoreCatalog))
         return DATABASE_CORRUPT;
     DatabaseStoreCatalog catalog;
     memcpy(&catalog, bytes, sizeof(catalog));
     if (memcmp(catalog.magic, DATABASE_STORE_CATALOG_MAGIC, sizeof(catalog.magic)) != 0 ||
         catalog.version != DATABASE_STORE_VERSION ||
-        (size_t) catalog.entityCount > (length - sizeof(catalog)) /
+        (bytes) catalog.entityCount > (length - sizeof(catalog)) /
             sizeof(DatabaseStoreEntity))
         return DATABASE_CORRUPT;
 
-    size_t offset = sizeof(catalog);
-    for (uint32_t e = 0u; e < catalog.entityCount; e++) {
+    bytes offset = sizeof(catalog);
+    for (u32 e = 0u; e < catalog.entityCount; e++) {
         if (offset > length || length - offset < sizeof(DatabaseStoreEntity))
             return DATABASE_CORRUPT;
         DatabaseStoreEntity record;
         memcpy(&record, bytes + offset, sizeof(record));
         offset += sizeof(record);
         if (record.stride == 0u || memchr(record.name, '\0', sizeof(record.name)) == nullptr ||
-            (size_t) record.rowCount > SIZE_MAX / record.stride)
+            (bytes) record.rowCount > SIZE_MAX / record.stride)
             return DATABASE_CORRUPT;
-        size_t rowBytes = (size_t) record.rowCount * record.stride;
+        bytes rowBytes = (bytes) record.rowCount * record.stride;
         if (rowBytes > length - offset)
             return DATABASE_CORRUPT;
-        int32_t index = Database_entityIndex(self, record.name);
+        i32 index = Database_entityIndex(self, record.name);
         if (index < 0)
             return DATABASE_ABSENT;
-        DbEntity *entity = (DbEntity*) ChunkedList_slot((*self).entities, (uint32_t) index);
+        DbEntity *entity = (DbEntity*) ChunkedList_slot((*self).entities, (u32) index);
         if (entity == nullptr || (*entity).schema == nullptr || (*entity).rows == nullptr)
             return DATABASE_ABSENT;
         if (Struct_getSize((*entity).schema) != record.stride)
@@ -1753,30 +1753,30 @@ static int32_t databaseStoreLoadCommit(Database *self, const uint8_t *bytes,
             if (record.indexField[0] == '\0' || record.indexCount != record.rowCount)
                 return DATABASE_CORRUPT;
             if (record.indexOffset > record.stride ||
-                sizeof(int32_t) > record.stride - record.indexOffset)
+                sizeof(i32) > record.stride - record.indexOffset)
                 return DATABASE_CORRUPT;
             // The registered schema must still declare that exact indexed span:
             // a schema that drifted from the image is rejected, never adapted.
             DbFieldSpan span = resolveField(entity, record.indexField);
             if (span.code != DATABASE_OK || span.offset != record.indexOffset ||
-                span.size != sizeof(int32_t) || !Field_isIndexed(span.field))
+                span.size != sizeof(i32) || !Field_isIndexed(span.field))
                 return DATABASE_CORRUPT;
         }
-        size_t indexBytes = (size_t) record.indexCount *
+        bytes indexBytes = (bytes) record.indexCount *
             sizeof(DatabaseStoreIndexRecord);
         if (indexBytes > length - offset - rowBytes)
             return DATABASE_CORRUPT;
         if (record.indexCount != 0u) {
-            const uint8_t *rows = bytes + offset;
-            const uint8_t *entries = rows + rowBytes;
-            int32_t lastKey = 0;
-            for (uint32_t r = 0u; r < record.indexCount; r++) {
+            const u8 *rows = bytes + offset;
+            const u8 *entries = rows + rowBytes;
+            i32 lastKey = 0;
+            for (u32 r = 0u; r < record.indexCount; r++) {
                 DatabaseStoreIndexRecord entry;
-                memcpy(&entry, entries + (size_t) r * sizeof(entry), sizeof(entry));
+                memcpy(&entry, entries + (bytes) r * sizeof(entry), sizeof(entry));
                 if (entry.rowIndex >= record.rowCount)
                     return DATABASE_CORRUPT;
-                int32_t key = 0;
-                memcpy(&key, rows + (size_t) entry.rowIndex * record.stride +
+                i32 key = 0;
+                memcpy(&key, rows + (bytes) entry.rowIndex * record.stride +
                     record.indexOffset, sizeof(key));
                 if (key != entry.key || (r != 0u && entry.key < lastKey))
                     return DATABASE_CORRUPT; // keys must be sorted and match their rows
@@ -1785,15 +1785,15 @@ static int32_t databaseStoreLoadCommit(Database *self, const uint8_t *bytes,
         }
         if (ChunkedList_size((*entity).rows) != 0u)
             return DATABASE_DUPLICATE;
-        size_t priorOffset = sizeof(catalog);
-        for (uint32_t prior = 0u; prior < e; prior++) {
+        bytes priorOffset = sizeof(catalog);
+        for (u32 prior = 0u; prior < e; prior++) {
             DatabaseStoreEntity previous;
             memcpy(&previous, bytes + priorOffset, sizeof(previous));
             if (strcmp(previous.name, record.name) == 0)
                 return DATABASE_DUPLICATE;
             priorOffset += sizeof(previous) +
-                (size_t) previous.rowCount * previous.stride +
-                (size_t) previous.indexCount * sizeof(DatabaseStoreIndexRecord);
+                (bytes) previous.rowCount * previous.stride +
+                (bytes) previous.indexCount * sizeof(DatabaseStoreIndexRecord);
         }
         offset += rowBytes + indexBytes;
     }
@@ -1801,29 +1801,29 @@ static int32_t databaseStoreLoadCommit(Database *self, const uint8_t *bytes,
         return DATABASE_CORRUPT;
     if (catalog.entityCount == 0u)
         return DATABASE_OK;
-    if ((size_t) catalog.entityCount > SIZE_MAX / sizeof(DbLoadStage))
+    if ((bytes) catalog.entityCount > SIZE_MAX / sizeof(DbLoadStage))
         return DATABASE_EXHAUSTED;
-    size_t stageBytes = (size_t) catalog.entityCount * sizeof(DbLoadStage);
+    bytes stageBytes = (bytes) catalog.entityCount * sizeof(DbLoadStage);
     DbLoadStage *stages = (DbLoadStage*) Memory_alloc(0u, stageBytes);
     if (stages == nullptr)
         return DATABASE_EXHAUSTED;
     memset(stages, 0, stageBytes);
     offset = sizeof(catalog);
-    int32_t status = DATABASE_OK;
-    uint32_t staged = 0u;
-    for (uint32_t e = 0u; e < catalog.entityCount && status == DATABASE_OK; e++) {
+    i32 status = DATABASE_OK;
+    u32 staged = 0u;
+    for (u32 e = 0u; e < catalog.entityCount && status == DATABASE_OK; e++) {
         DatabaseStoreEntity record;
         memcpy(&record, bytes + offset, sizeof(record));
         offset += sizeof(record);
-        int32_t index = Database_entityIndex(self, record.name);
+        i32 index = Database_entityIndex(self, record.name);
         DbEntity *entity = index < 0 ? nullptr : (DbEntity*) ChunkedList_slot(
-            (*self).entities, (uint32_t) index);
+            (*self).entities, (u32) index);
         if (entity == nullptr) {
             status = DATABASE_ABSENT;
             break;
         }
         ChunkedList *rows = ChunkedList_3(ID_DB_DATABASE_ROW,
-            (uint32_t) sizeof(void*), (*self).chunkBytes);
+            (u32) sizeof(void*), (*self).chunkBytes);
         if (rows == nullptr) {
             status = DATABASE_EXHAUSTED;
             break;
@@ -1835,14 +1835,14 @@ static int32_t databaseStoreLoadCommit(Database *self, const uint8_t *bytes,
             status = DATABASE_EXHAUSTED;
             break;
         }
-        for (uint32_t r = 0u; r < record.rowCount; r++) {
+        for (u32 r = 0u; r < record.rowCount; r++) {
             void *copy = Memory_alloc(TYPE_DB_DATABASE_ROW_SINGLETON, record.stride);
             if (copy == nullptr) {
                 status = DATABASE_EXHAUSTED;
                 break;
             }
-            memcpy(copy, bytes + offset + (size_t) r * record.stride, record.stride);
-            uint8_t *slot = ChunkedList_addSlot(rows);
+            memcpy(copy, bytes + offset + (bytes) r * record.stride, record.stride);
+            u8 *slot = ChunkedList_addSlot(rows);
             if (slot == nullptr) {
                 Memory_free(copy);
                 status = DATABASE_EXHAUSTED;
@@ -1852,19 +1852,19 @@ static int32_t databaseStoreLoadCommit(Database *self, const uint8_t *bytes,
         }
         if (status == DATABASE_OK && record.indexCount != 0u) {
             ChunkedList *records = ChunkedList_3(ID_DB_DATABASE_ROW,
-                (uint32_t) sizeof(DbIndexRecord), (*self).chunkBytes);
+                (u32) sizeof(DbIndexRecord), (*self).chunkBytes);
             if (records == nullptr || !ChunkedList_reserve(records, record.indexCount)) {
                 ChunkedList_free(records);
                 status = DATABASE_EXHAUSTED;
                 break;
             }
-            for (uint32_t r = 0u; r < record.indexCount; r++) {
+            for (u32 r = 0u; r < record.indexCount; r++) {
                 DatabaseStoreIndexRecord entry;
                 memcpy(&entry, bytes + offset +
-                    (size_t) record.rowCount * record.stride +
-                    (size_t) r * sizeof(entry), sizeof(entry));
-                uint8_t *rowSlot = ChunkedList_slot(rows, entry.rowIndex);
-                uint8_t *slot = rowSlot == nullptr ? nullptr : ChunkedList_addSlot(records);
+                    (bytes) record.rowCount * record.stride +
+                    (bytes) r * sizeof(entry), sizeof(entry));
+                u8 *rowSlot = ChunkedList_slot(rows, entry.rowIndex);
+                u8 *slot = rowSlot == nullptr ? nullptr : ChunkedList_addSlot(records);
                 if (slot == nullptr) {
                     ChunkedList_free(records);
                     status = DATABASE_EXHAUSTED;
@@ -1882,11 +1882,11 @@ static int32_t databaseStoreLoadCommit(Database *self, const uint8_t *bytes,
                    sizeof(record.indexField));
             stages[staged - 1u].indexOffset = record.indexOffset;
         }
-        offset += (size_t) record.rowCount * record.stride +
-            (size_t) record.indexCount * sizeof(DatabaseStoreIndexRecord);
+        offset += (bytes) record.rowCount * record.stride +
+            (bytes) record.indexCount * sizeof(DatabaseStoreIndexRecord);
     }
     if (status == DATABASE_OK) {
-        for (uint32_t i = 0u; i < staged; i++) {
+        for (u32 i = 0u; i < staged; i++) {
             DbEntity *entity = stages[i].entity;
             ChunkedList *oldRows = (*entity).rows;
             (*entity).rows = stages[i].rows;
@@ -1908,7 +1908,7 @@ static int32_t databaseStoreLoadCommit(Database *self, const uint8_t *bytes,
             }
         }
     }
-    for (uint32_t i = 0u; i < staged; i++) {
+    for (u32 i = 0u; i < staged; i++) {
         freeOwnedRows(stages[i].rows);
         if (stages[i].indexRecords != nullptr)
             ChunkedList_free(stages[i].indexRecords);
@@ -1918,7 +1918,7 @@ static int32_t databaseStoreLoadCommit(Database *self, const uint8_t *bytes,
 }
 
 /** Publishes page-chain bytes, then atomically replaces the root page. */
-int32_t Database_saveStore(Database *self, Store *store) {
+i32 Database_saveStore(Database *self, Store *store) {
     if (self == nullptr || store == nullptr || !Store_isOpen(store)) {
         recordError(self, DATABASE_INVALID, "saveStore: invalid database or closed store");
         THROW("Database_saveStore: invalid database or closed store");
@@ -1929,23 +1929,23 @@ int32_t Database_saveStore(Database *self, Store *store) {
         THROW("Database_saveStore: root page admission failed");
         return DATABASE_IO;
     }
-    size_t length = 0u;
-    uint8_t *bytes = databaseStoreCatalogBytes(self, &length);
+    bytes length = 0u;
+    u8 *bytes = databaseStoreCatalogBytes(self, &length);
     if (bytes == nullptr) {
         recordError(self, DATABASE_EXHAUSTED, "saveStore: catalog serialization failed");
         THROW("Database_saveStore: catalog serialization failed");
         return DATABASE_EXHAUSTED;
     }
-    uint32_t pageSize = Store_pageSize(store);
-    size_t chunkCapacity = (size_t) pageSize - PAGE_HEADER_BYTES - sizeof(DatabaseStoreLink);
-    uint32_t nextPage = 0u;
-    size_t end = length;
+    u32 pageSize = Store_pageSize(store);
+    bytes chunkCapacity = (bytes) pageSize - PAGE_HEADER_BYTES - sizeof(DatabaseStoreLink);
+    u32 nextPage = 0u;
+    bytes end = length;
     bool ok = chunkCapacity > 0u;
     while (ok && end > 0u) {
-        size_t start = end > chunkCapacity ? end - chunkCapacity : 0u;
-        uint32_t chunkBytes = (uint32_t) (end - start);
-        size_t payloadLength = sizeof(DatabaseStoreLink) + chunkBytes;
-        uint8_t *payload = (uint8_t*) Memory_alloc(0u, payloadLength);
+        bytes start = end > chunkCapacity ? end - chunkCapacity : 0u;
+        u32 chunkBytes = (u32) (end - start);
+        bytes payloadLength = sizeof(DatabaseStoreLink) + chunkBytes;
+        u8 *payload = (u8*) Memory_alloc(0u, payloadLength);
         if (payload == nullptr) {
             ok = false;
             break;
@@ -1953,9 +1953,9 @@ int32_t Database_saveStore(Database *self, Store *store) {
         DatabaseStoreLink link = { nextPage, chunkBytes, start };
         memcpy(payload, &link, sizeof(link));
         memcpy(payload + sizeof(link), bytes + start, chunkBytes);
-        uint32_t pageId = 0u;
+        u32 pageId = 0u;
         StoreCode added = Store_add(store, PAGE_KIND_LEAF, payload,
-                                    (uint32_t) payloadLength, &pageId);
+                                    (u32) payloadLength, &pageId);
         Memory_free(payload);
         if (added != STORE_OK) {
             ok = false;
@@ -1978,7 +1978,7 @@ int32_t Database_saveStore(Database *self, Store *store) {
     root.length = length;
     root.crc = Crc32_finalize(Crc32_update(CRC32_SEED, bytes, length));
     bool published = Store_page_write(store, DATABASE_STORE_ROOT_ID, PAGE_KIND_CATALOG,
-        (const uint8_t*) &root, (uint32_t) sizeof(root)) == STORE_OK;
+        (const u8*) &root, (u32) sizeof(root)) == STORE_OK;
     Memory_free(bytes);
     if (!published) {
         recordError(self, DATABASE_IO, "saveStore: root publication failed; reopen to resolve");
@@ -1990,14 +1990,14 @@ int32_t Database_saveStore(Database *self, Store *store) {
 }
 
 /** Loads the root-selected page chain, validates bytes, then stages rows atomically. */
-int32_t Database_loadStore(Database *self, Store *store) {
+i32 Database_loadStore(Database *self, Store *store) {
     if (self == nullptr || store == nullptr || !Store_isOpen(store)) {
         recordError(self, DATABASE_INVALID, "loadStore: invalid database or closed store");
         THROW("Database_loadStore: invalid database or closed store");
         return DATABASE_INVALID;
     }
-    uint32_t pageSize = Store_pageSize(store);
-    uint8_t *pageBytes = (uint8_t*) Memory_alloc(0u, pageSize);
+    u32 pageSize = Store_pageSize(store);
+    u8 *pageBytes = (u8*) Memory_alloc(0u, pageSize);
     if (pageBytes == nullptr) {
         recordError(self, DATABASE_EXHAUSTED, "loadStore: page buffer allocation failed");
         THROW("Database_loadStore: page buffer allocation failed");
@@ -2005,28 +2005,28 @@ int32_t Database_loadStore(Database *self, Store *store) {
     }
     DatabaseStoreRoot root;
     bool rootOk = databaseStoreReadRoot(store, pageBytes, &root);
-    uint32_t pageCount = Store_pageCount(store);
-    size_t chunkCapacity = (size_t) pageSize - PAGE_HEADER_BYTES - sizeof(DatabaseStoreLink);
-    size_t maxCatalogBytes = pageCount > 1u ?
-        (size_t) (pageCount - 1u) * chunkCapacity : 0u;
-    if (!rootOk || root.length == 0u || (uint64_t) (size_t) root.length != root.length ||
+    u32 pageCount = Store_pageCount(store);
+    bytes chunkCapacity = (bytes) pageSize - PAGE_HEADER_BYTES - sizeof(DatabaseStoreLink);
+    bytes maxCatalogBytes = pageCount > 1u ?
+        (bytes) (pageCount - 1u) * chunkCapacity : 0u;
+    if (!rootOk || root.length == 0u || (u64) (bytes) root.length != root.length ||
         root.length > maxCatalogBytes) {
         Memory_free(pageBytes);
         recordError(self, DATABASE_CORRUPT, "loadStore: root page is absent or invalid");
         THROW("Database_loadStore: root page is absent or invalid");
         return DATABASE_CORRUPT;
     }
-    size_t length = (size_t) root.length;
-    uint8_t *bytes = (uint8_t*) Memory_alloc(0u, length);
+    bytes length = (bytes) root.length;
+    u8 *bytes = (u8*) Memory_alloc(0u, length);
     if (bytes == nullptr) {
         Memory_free(pageBytes);
         recordError(self, DATABASE_EXHAUSTED, "loadStore: snapshot buffer allocation failed");
         THROW("Database_loadStore: snapshot buffer allocation failed");
         return DATABASE_EXHAUSTED;
     }
-    size_t offset = 0u;
-    uint32_t pageId = root.firstPage;
-    uint32_t visited = 0u;
+    bytes offset = 0u;
+    u32 pageId = root.firstPage;
+    u32 visited = 0u;
     bool valid = pageId != 0u;
     while (valid && offset < length) {
         if (pageId == 0u || pageId > Store_pageCount(store) ||
@@ -2034,8 +2034,8 @@ int32_t Database_loadStore(Database *self, Store *store) {
             valid = false;
             break;
         }
-        uint32_t used = 0u;
-        uint32_t kind = 0u;
+        u32 used = 0u;
+        u32 kind = 0u;
         bool truncated = false;
         StoreCode readCode = Store_page_read(store, pageId, pageBytes, pageSize,
             &used, &kind, &truncated);
@@ -2064,7 +2064,7 @@ int32_t Database_loadStore(Database *self, Store *store) {
         THROW("Database_loadStore: page chain or snapshot checksum rejected");
         return DATABASE_CORRUPT;
     }
-    int32_t status = databaseStoreLoadCommit(self, bytes, length);
+    i32 status = databaseStoreLoadCommit(self, bytes, length);
     Memory_free(bytes);
     if (status != DATABASE_OK) {
         recordError(self, status, "loadStore: registered schemas rejected snapshot");
@@ -2076,7 +2076,7 @@ int32_t Database_loadStore(Database *self, Store *store) {
 }
 
 /** Reads one validated persisted entity descriptor as an owned value record. */
-DatabaseCatalogEntry Database_storeCatalogEntry(Store *store, uint32_t wantedIndex) {
+DatabaseCatalogEntry Database_storeCatalogEntry(Store *store, u32 wantedIndex) {
     DatabaseCatalogEntry result;
     memset(&result, 0, sizeof(result));
     result.code = DATABASE_INVALID;
@@ -2084,12 +2084,12 @@ DatabaseCatalogEntry Database_storeCatalogEntry(Store *store, uint32_t wantedInd
         THROW("Database_storeCatalogEntry: invalid or closed store");
         return result;
     }
-    uint32_t pageSize = Store_pageSize(store);
-    uint32_t pageCount = Store_pageCount(store);
-    size_t chunkCapacity = (size_t) pageSize - PAGE_HEADER_BYTES -
+    u32 pageSize = Store_pageSize(store);
+    u32 pageCount = Store_pageCount(store);
+    bytes chunkCapacity = (bytes) pageSize - PAGE_HEADER_BYTES -
         sizeof(DatabaseStoreLink);
-    size_t maxBytes = pageCount > 1u ? (size_t) (pageCount - 1u) * chunkCapacity : 0u;
-    uint8_t *pageBytes = (uint8_t*) Memory_alloc(0u, pageSize);
+    bytes maxBytes = pageCount > 1u ? (bytes) (pageCount - 1u) * chunkCapacity : 0u;
+    u8 *pageBytes = (u8*) Memory_alloc(0u, pageSize);
     if (pageBytes == nullptr) {
         result.code = DATABASE_EXHAUSTED;
         THROW("Database_storeCatalogEntry: page buffer allocation failed");
@@ -2098,31 +2098,31 @@ DatabaseCatalogEntry Database_storeCatalogEntry(Store *store, uint32_t wantedInd
     DatabaseStoreRoot root;
     bool rootValid = databaseStoreReadRoot(store, pageBytes, &root);
     if (!rootValid || root.length == 0u ||
-        (uint64_t) (size_t) root.length != root.length || root.length > maxBytes) {
+        (u64) (bytes) root.length != root.length || root.length > maxBytes) {
         Memory_free(pageBytes);
         result.code = DATABASE_CORRUPT;
         THROW("Database_storeCatalogEntry: root page is absent or invalid");
         return result;
     }
-    size_t length = (size_t) root.length;
-    uint8_t *bytes = (uint8_t*) Memory_alloc(0u, length);
+    bytes length = (bytes) root.length;
+    u8 *bytes = (u8*) Memory_alloc(0u, length);
     if (bytes == nullptr) {
         Memory_free(pageBytes);
         result.code = DATABASE_EXHAUSTED;
         THROW("Database_storeCatalogEntry: catalog allocation failed");
         return result;
     }
-    size_t offset = 0u;
-    uint32_t pageId = root.firstPage;
-    uint32_t visited = 0u;
+    bytes offset = 0u;
+    u32 pageId = root.firstPage;
+    u32 visited = 0u;
     bool valid = pageId != 0u;
     while (valid && offset < length) {
         if (pageId == 0u || pageId > pageCount || visited++ >= pageCount) {
             valid = false;
             break;
         }
-        uint32_t used = 0u;
-        uint32_t kind = 0u;
+        u32 used = 0u;
+        u32 kind = 0u;
         bool truncated = false;
         StoreCode code = Store_page_read(store, pageId, pageBytes, pageSize,
             &used, &kind, &truncated);
@@ -2155,16 +2155,16 @@ DatabaseCatalogEntry Database_storeCatalogEntry(Store *store, uint32_t wantedInd
     memcpy(&catalog, bytes, sizeof(catalog));
     if (memcmp(catalog.magic, DATABASE_STORE_CATALOG_MAGIC,
             sizeof(catalog.magic)) != 0 || catalog.version != DATABASE_STORE_VERSION ||
-        (size_t) catalog.entityCount > (length - sizeof(catalog)) /
+        (bytes) catalog.entityCount > (length - sizeof(catalog)) /
             sizeof(DatabaseStoreEntity)) {
         Memory_free(bytes);
         result.code = DATABASE_CORRUPT;
         THROW("Database_storeCatalogEntry: catalog header rejected");
         return result;
     }
-    size_t recordOffset = sizeof(catalog);
+    bytes recordOffset = sizeof(catalog);
     bool found = false;
-    for (uint32_t i = 0u; i < catalog.entityCount; i++) {
+    for (u32 i = 0u; i < catalog.entityCount; i++) {
         if (recordOffset > length || length - recordOffset < sizeof(DatabaseStoreEntity)) {
             valid = false;
             break;
@@ -2174,21 +2174,21 @@ DatabaseCatalogEntry Database_storeCatalogEntry(Store *store, uint32_t wantedInd
         recordOffset += sizeof(record);
         if (record.stride == 0u ||
             memchr(record.name, '\0', sizeof(record.name)) == nullptr ||
-            (size_t) record.rowCount > SIZE_MAX / record.stride) {
+            (bytes) record.rowCount > SIZE_MAX / record.stride) {
             valid = false;
             break;
         }
-        size_t rowBytes = (size_t) record.rowCount * record.stride;
+        bytes rowBytes = (bytes) record.rowCount * record.stride;
         if (rowBytes > length - recordOffset) {
             valid = false;
             break;
         }
-        size_t indexBytes = (size_t) record.indexCount *
+        bytes indexBytes = (bytes) record.indexCount *
             sizeof(DatabaseStoreIndexRecord);
         if (record.indexCount != 0u &&
             (record.indexField[0] == '\0' || record.indexCount != record.rowCount ||
              record.indexOffset > record.stride ||
-             sizeof(int32_t) > record.stride - record.indexOffset)) {
+             sizeof(i32) > record.stride - record.indexOffset)) {
             valid = false;
             break;
         }
@@ -2229,7 +2229,7 @@ DatabaseCatalogEntry Database_storeCatalogEntry(Store *store, uint32_t wantedInd
  * Formats a bounded value summary of the Database; null self formats as
  * "nullptr" and reports truncation through outTruncated when supplied.
  */
-void Database_toString(const Database *self, char *dest, size_t cap, bool *outTruncated) {
+void Database_toString(const Database *self, char *dest, bytes cap, bool *outTruncated) {
     if (outTruncated)
         *outTruncated = false;
     if (dest == nullptr || cap == 0u)
@@ -2239,7 +2239,7 @@ void Database_toString(const Database *self, char *dest, size_t cap, bool *outTr
         return;
     }
     int written = snprintf(dest, cap, "Database(entities=%u)", Database_entityCount(self));
-    if (written < 0 || (size_t) written >= cap) {
+    if (written < 0 || (bytes) written >= cap) {
         if (outTruncated)
             *outTruncated = true;
     }
@@ -2249,7 +2249,7 @@ void Database_toString(const Database *self, char *dest, size_t cap, bool *outTr
  * Formats the Database's own fields into a bounded structure summary; null
  * self formats as "nullptr" and reports truncation when possible.
  */
-void Database_toStringStruct(const Database *self, char *dest, size_t cap, bool *outTruncated) {
+void Database_toStringStruct(const Database *self, char *dest, bytes cap, bool *outTruncated) {
     if (outTruncated)
         *outTruncated = false;
     if (dest == nullptr || cap == 0u)
@@ -2261,7 +2261,7 @@ void Database_toStringStruct(const Database *self, char *dest, size_t cap, bool 
     int written = snprintf(dest, cap, "Database { entities=0x%llx, entityCount=%u, chunkBytes=%u, lastCode=%d }",
                            (unsigned long long) (uintptr_t) (*self).entities, Database_entityCount(self),
                            (*self).chunkBytes, (*self).lastCode);
-    if (written < 0 || (size_t) written >= cap) {
+    if (written < 0 || (bytes) written >= cap) {
         if (outTruncated)
             *outTruncated = true;
     }

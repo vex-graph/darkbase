@@ -9,11 +9,11 @@
 // One reflected entity's persisted catalog metadata. This is a value record;
 // it owns no Store, page, schema, or row memory.
 typedef struct DatabaseCatalogEntry {
-    int32_t code; // DATABASE_OK when found; otherwise the admission failure
+    i32 code; // DATABASE_OK when found; otherwise the admission failure
     bool found;
     char name[DB_ENTITY_NAME_BYTES];
-    uint32_t rowStride;
-    uint32_t rowCount;
+    u32 rowStride;
+    u32 rowCount;
 } DatabaseCatalogEntry;
 
 #endif

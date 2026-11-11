@@ -29,11 +29,11 @@
 #define RECORDS 8u
 
 static char path[512];
-static uint32_t seenOps[RECORDS];
-static uint64_t seenSeq[RECORDS];
-static uint8_t seenPayload[RECORDS][64];
-static uint32_t seenLength[RECORDS];
-static uint32_t seenCount = 0u;
+static u32 seenOps[RECORDS];
+static u64 seenSeq[RECORDS];
+static u8 seenPayload[RECORDS][64];
+static u32 seenLength[RECORDS];
+static u32 seenCount = 0u;
 
 static bool collect(void *context, const WalRecord *record) {
     (void) context;
@@ -47,7 +47,7 @@ static bool collect(void *context, const WalRecord *record) {
     return true;
 }
 
-static uint32_t stopCalls = 0u;
+static u32 stopCalls = 0u;
 static bool stopAfterOne(void *context, const WalRecord *record) {
     (void) context;
     assert((*record).sequence == 1u);   // it was handed the FIRST record, then stopped
@@ -64,7 +64,7 @@ static void makePath(void) {
 }
 
 /* Overwrite bytes at an absolute offset without going through the log. */
-static void poke(size_t offset, const uint8_t *bytes, size_t length) {
+static void poke(bytes offset, const u8 *bytes, bytes length) {
     FILE *f = fopen(path, "r+b.sh");
     assert(f != nullptr);
     assert(fseek(f, (long) offset, SEEK_SET) == 0);
@@ -73,7 +73,7 @@ static void poke(size_t offset, const uint8_t *bytes, size_t length) {
 }
 
 /* Append raw bytes at the end, as a crash mid-append would leave them. */
-static void appendRaw(const uint8_t *bytes, size_t length) {
+static void appendRaw(const u8 *bytes, bytes length) {
     FILE *f = fopen(path, "ab");
     assert(f != nullptr);
     assert(fwrite(bytes, 1, length, f) == length);
@@ -96,7 +96,7 @@ static long fileSize(void) {
 static void regionFile(void) {
     FILE *f = fopen(path, "wb");
     assert(f != nullptr);
-    uint8_t bytes[REGION_FILE_BYTES] = {0};
+    u8 bytes[REGION_FILE_BYTES] = {0};
     memset(bytes, 0x5a, REGION_OFFSET);
     memset(bytes + REGION_OFFSET + REGION_CAPACITY, 0x6b,
            REGION_FILE_BYTES - REGION_OFFSET - REGION_CAPACITY);
@@ -107,12 +107,12 @@ static void regionFile(void) {
 static void regionGuards(void) {
     FILE *f = fopen(path, "rb");
     assert(f != nullptr);
-    uint8_t bytes[REGION_FILE_BYTES];
+    u8 bytes[REGION_FILE_BYTES];
     assert(fread(bytes, 1u, sizeof bytes, f) == sizeof bytes);
     assert(fclose(f) == 0);
-    for (size_t i = 0u; i < REGION_OFFSET; ++i)
+    for (bytes i = 0u; i < REGION_OFFSET; ++i)
         assert(bytes[i] == 0x5a);
-    for (size_t i = REGION_OFFSET + REGION_CAPACITY; i < sizeof bytes; ++i)
+    for (bytes i = REGION_OFFSET + REGION_CAPACITY; i < sizeof bytes; ++i)
         assert(bytes[i] == 0x6b);
     assert(fileSize() == REGION_FILE_BYTES);
 }
@@ -134,10 +134,10 @@ static void regionCases(void) {
     assert(Wal_isOpen(log) && Wal_code(log) == WAL_OK);
     assert(Wal_remaining(log) == REGION_CAPACITY - WAL_HEADER_BYTES);
     assert(Wal_exhaustionCount(log) == 0u);
-    assert(Wal_append(log, WAL_OP_UPDATE, (const uint8_t*) "alpha", 5u, nullptr) == WAL_OK);
+    assert(Wal_append(log, WAL_OP_UPDATE, (const u8*) "alpha", 5u, nullptr) == WAL_OK);
     assert(Wal_sync(log) == WAL_OK);
-    uint64_t remaining = Wal_remaining(log);
-    uint8_t scratch[256];
+    u64 remaining = Wal_remaining(log);
+    u8 scratch[256];
     resetSeen();
     assert(Wal_replay(log, scratch, sizeof scratch, collect, nullptr) == WAL_OK);
     assert(seenCount == 1u && memcmp(seenPayload[0], "alpha", 5u) == 0);
@@ -145,8 +145,8 @@ static void regionCases(void) {
     assert(Wal_remaining(log) == remaining && Wal_sequence(log) == 1u);
     assert(Wal_checkpoint(log) == WAL_INVALID);
     assert(Wal_remaining(log) == remaining);
-    uint8_t payload[REGION_CAPACITY] = {0};
-    uint64_t seq = 99u;
+    u8 payload[REGION_CAPACITY] = {0};
+    u64 seq = 99u;
     // Capture the once-per-epoch refusal diagnostic and assert no second line.
     FILE *errors = tmpfile();
     assert(errors != nullptr);
@@ -158,7 +158,7 @@ static void regionCases(void) {
     assert(close(saved) == 0);
     rewind(errors);
     char diagnostic[512];
-    size_t used = fread(diagnostic, 1u, sizeof diagnostic - 1u, errors);
+    bytes used = fread(diagnostic, 1u, sizeof diagnostic - 1u, errors);
     diagnostic[used] = '\0';
     assert(strstr(diagnostic, "region exhausted, request") != nullptr);
     char *line = strchr(diagnostic, '\n');
@@ -168,7 +168,7 @@ static void regionCases(void) {
     assert(Wal_remaining(log) == remaining && Wal_sequence(log) == 1u);
     // Fill exactly to the capacity boundary, reopen, and refuse one more record.
     assert(Wal_append(log, WAL_OP_UPDATE, payload,
-                      (uint32_t) (remaining - WAL_RECORD_FIXED - 4u - WAL_COMMIT_BYTES), nullptr) == WAL_OK);
+                      (u32) (remaining - WAL_RECORD_FIXED - 4u - WAL_COMMIT_BYTES), nullptr) == WAL_OK);
     assert(Wal_remaining(log) == 0u && Wal_sync(log) == WAL_OK);
     Wal_free(log);
     log = Wal_3(path, REGION_OFFSET, REGION_CAPACITY);
@@ -182,15 +182,15 @@ static void regionCases(void) {
     // Obtain real format bytes once; publish body bytes without its leading marker.
     regionFile();
     log = Wal(path, REGION_OFFSET, REGION_CAPACITY);
-    assert(Wal_append(log, WAL_OP_UPDATE, (const uint8_t*) "alpha", 5u, nullptr) == WAL_OK);
+    assert(Wal_append(log, WAL_OP_UPDATE, (const u8*) "alpha", 5u, nullptr) == WAL_OK);
     assert(Wal_sync(log) == WAL_OK);
     Wal_free(log);
     enum { RECORD_BYTES = WAL_RECORD_FIXED + 5u + 4u + WAL_COMMIT_BYTES };
-    uint8_t record[RECORD_BYTES];
+    u8 record[RECORD_BYTES];
     FILE *f = fopen(path, "rb");
     assert(f != nullptr && fseek(f, REGION_OFFSET + WAL_HEADER_BYTES, SEEK_SET) == 0);
     assert(fread(record, 1u, sizeof record, f) == sizeof record && fclose(f) == 0);
-    for (size_t cut = 1u; cut <= sizeof record - WAL_COMMIT_BYTES; ++cut) {
+    for (bytes cut = 1u; cut <= sizeof record - WAL_COMMIT_BYTES; ++cut) {
         regionFile();
         log = Wal_3(path, REGION_OFFSET, REGION_CAPACITY);
         Wal_free(log);
@@ -211,7 +211,7 @@ static void regionCases(void) {
         regionGuards();
     }
     // Publication itself may tear; any nonzero invalid fixed marker fails closed.
-    for (size_t cut = 1u; cut < WAL_COMMIT_BYTES; ++cut) {
+    for (bytes cut = 1u; cut < WAL_COMMIT_BYTES; ++cut) {
         regionFile();
         log = Wal_3(path, REGION_OFFSET, REGION_CAPACITY);
         Wal_free(log);
@@ -235,15 +235,15 @@ static void regionCases(void) {
     record[WAL_COMMIT_BYTES + WAL_RECORD_FIXED] ^= 1u;
     // A committed leading marker makes EVERY malformed length corruption, never
     // a discardable crash tail. Cover both out-of-region and in-region misframing.
-    static const uint32_t corruptLengths[] = {UINT32_MAX, 0u, 1u, WAL_PAYLOAD_MAX + 1u};
-    for (size_t i = 0u; i < sizeof corruptLengths / sizeof corruptLengths[0]; ++i) {
+    static const u32 corruptLengths[] = {UINT32_MAX, 0u, 1u, WAL_PAYLOAD_MAX + 1u};
+    for (bytes i = 0u; i < sizeof corruptLengths / sizeof corruptLengths[0]; ++i) {
         regionFile();
         log = Wal_3(path, REGION_OFFSET, REGION_CAPACITY);
         Wal_free(log);
         poke(REGION_OFFSET + WAL_HEADER_BYTES, record, sizeof record);
-        uint32_t wrongLength = corruptLengths[i];
+        u32 wrongLength = corruptLengths[i];
         poke(REGION_OFFSET + WAL_HEADER_BYTES + WAL_COMMIT_BYTES + 16u,
-             (const uint8_t*) &wrongLength, sizeof wrongLength);
+             (const u8*) &wrongLength, sizeof wrongLength);
         log = Wal_3(path, REGION_OFFSET, REGION_CAPACITY);
         assert(!Wal_isOpen(log) && Wal_code(log) == WAL_CORRUPT);
         Wal_free(log);
@@ -268,12 +268,12 @@ static void regionCases(void) {
     regionFile();
     log = Wal_3(path, REGION_OFFSET, REGION_CAPACITY);
     Wal_free(log);
-    uint8_t header[WAL_HEADER_BYTES];
+    u8 header[WAL_HEADER_BYTES];
     f = fopen(path, "rb");
     assert(f != nullptr && fseek(f, REGION_OFFSET, SEEK_SET) == 0);
     assert(fread(header, 1u, sizeof header, f) == sizeof header && fclose(f) == 0);
     memset(header + 8u, 0xff, 8u);
-    uint32_t crc = Crc32_of(header, 20u);
+    u32 crc = Crc32_of(header, 20u);
     memcpy(header + 20u, &crc, sizeof crc);
     poke(REGION_OFFSET, header, sizeof header);
     log = Wal_3(path, REGION_OFFSET, REGION_CAPACITY);
@@ -291,7 +291,7 @@ static void regionCases(void) {
     assert(!Wal_isOpen(log) && Wal_code(log) == WAL_CORRUPT);
     Wal_free(log);
     regionFile();
-    const uint8_t bad = 1u;
+    const u8 bad = 1u;
     poke(REGION_OFFSET + WAL_HEADER_BYTES + 40u, &bad, 1u);
     log = Wal_3(path, REGION_OFFSET, REGION_CAPACITY);
     assert(Wal_code(log) == WAL_CORRUPT && !Wal_isOpen(log));
@@ -303,7 +303,7 @@ int main(void) {
     /* An unopened owner is CLOSED on every operation; arguments are a different code. */
     Wal *closed = Wal_0();
     assert(closed != nullptr && !Wal_isOpen(closed));
-    assert(Wal_append(closed, WAL_OP_INSERT, (const uint8_t*) "x", 1u, nullptr) == WAL_CLOSED);
+    assert(Wal_append(closed, WAL_OP_INSERT, (const u8*) "x", 1u, nullptr) == WAL_CLOSED);
     assert(Wal_replay(closed, nullptr, 0u, nullptr, nullptr) == WAL_CLOSED);
     assert(Wal_sync(closed) == WAL_CLOSED);
     assert(Wal_checkpoint(closed) == WAL_CLOSED);
@@ -329,10 +329,10 @@ int main(void) {
     assert(Wal_sequence(log) == 0u && Wal_count(log) == 0u);
     assert(fileSize() == (long) WAL_HEADER_BYTES);   // a fresh log is header-only
 
-    assert(Wal_append(log, WAL_OP_INSERT, (const uint8_t*) "alpha", 5u, nullptr) == WAL_OK);
-    assert(Wal_append(log, WAL_OP_UPDATE, (const uint8_t*) "beta!", 5u, nullptr) == WAL_OK);
-    uint64_t third = 0u;
-    assert(Wal_append(log, WAL_OP_DELETE, (const uint8_t*) "gamma", 5u, &third) == WAL_OK);
+    assert(Wal_append(log, WAL_OP_INSERT, (const u8*) "alpha", 5u, nullptr) == WAL_OK);
+    assert(Wal_append(log, WAL_OP_UPDATE, (const u8*) "beta!", 5u, nullptr) == WAL_OK);
+    u64 third = 0u;
+    assert(Wal_append(log, WAL_OP_DELETE, (const u8*) "gamma", 5u, &third) == WAL_OK);
     assert(third == 3u);
     assert(Wal_sequence(log) == 3u && Wal_count(log) == 3u);
 
@@ -344,10 +344,10 @@ int main(void) {
     assert(afterThree == (long) (WAL_HEADER_BYTES + 3u * (WAL_RECORD_FIXED + 5u + 4u)));
 
     /* Argument refusals never write; the file grows only for a legal record. */
-    assert(Wal_append(log, 0u, (const uint8_t*) "x", 1u, nullptr) == WAL_INVALID);
-    assert(Wal_append(log, 99u, (const uint8_t*) "x", 1u, nullptr) == WAL_INVALID);
+    assert(Wal_append(log, 0u, (const u8*) "x", 1u, nullptr) == WAL_INVALID);
+    assert(Wal_append(log, 99u, (const u8*) "x", 1u, nullptr) == WAL_INVALID);
     assert(Wal_append(log, WAL_OP_INSERT, nullptr, 4u, nullptr) == WAL_INVALID);
-    assert(Wal_append(log, WAL_OP_INSERT, (const uint8_t*) "x", WAL_PAYLOAD_MAX + 1u, nullptr) == WAL_INVALID);
+    assert(Wal_append(log, WAL_OP_INSERT, (const u8*) "x", WAL_PAYLOAD_MAX + 1u, nullptr) == WAL_INVALID);
     assert(fileSize() == afterThree);         // every refusal left the log untouched
     assert(Wal_code(log) == WAL_INVALID);     // the last refusal is recorded
     assert(Wal_append(log, WAL_OP_INSERT, nullptr, 0u, nullptr) == WAL_OK);   // empty payload is legal
@@ -361,7 +361,7 @@ int main(void) {
     assert(Wal_sequence(reopened) == 4u && Wal_count(reopened) == 4u);
     assert(!Wal_tailTorn(reopened));
 
-    uint8_t scratch[64];
+    u8 scratch[64];
     resetSeen();
     assert(Wal_replay(reopened, scratch, sizeof scratch, collect, nullptr) == WAL_OK);
     assert(seenCount == 4u && Wal_recovered(reopened) == 4u);
@@ -377,13 +377,13 @@ int main(void) {
 
     assert(Wal_replay(reopened, nullptr, 0u, collect, nullptr) == WAL_INVALID);
     /* A record larger than the caller's buffer is refused, never truncated. */
-    assert(Wal_append(reopened, WAL_OP_INSERT, (const uint8_t*) "0123456789", 10u, nullptr) == WAL_OK);
-    uint8_t tiny[4];
+    assert(Wal_append(reopened, WAL_OP_INSERT, (const u8*) "0123456789", 10u, nullptr) == WAL_OK);
+    u8 tiny[4];
     assert(Wal_replay(reopened, tiny, sizeof tiny, collect, nullptr) == WAL_INVALID);
     Wal_free(reopened);
 
     /* A TORN TAIL is dropped, not obeyed: a crash mid-append looks exactly like this. */
-    static const uint8_t torn[7] = { 'V', 'E', 'X', 'W', 1u, 0u, 0u };   // a partial prefix
+    static const u8 torn[7] = { 'V', 'E', 'X', 'W', 1u, 0u, 0u };   // a partial prefix
     appendRaw(torn, sizeof torn);
     Wal *tornLog = Wal_1(path);
     assert(tornLog != nullptr);
@@ -405,7 +405,7 @@ int main(void) {
     assert(Wal_checkpoint(clean) == WAL_OK);
     assert(Wal_count(clean) == 0u && Wal_sequence(clean) == 3u && Wal_baseSequence(clean) == 3u);
     assert(fileSize() == (long) WAL_HEADER_BYTES);              // header-only again
-    assert(Wal_append(clean, WAL_OP_INSERT, (const uint8_t*) "delta", 5u, &third) == WAL_OK);
+    assert(Wal_append(clean, WAL_OP_INSERT, (const u8*) "delta", 5u, &third) == WAL_OK);
     assert(third == 4u);                                        // the sequence NEVER restarts
     assert(Wal_sync(clean) == WAL_OK);
     Wal_free(clean);
@@ -422,7 +422,7 @@ int main(void) {
     /* A COMPLETE record with a bad checksum is CORRUPTION, never a skip: a hole in a
      * log destroys the order the log exists to guarantee. */
     assert(fileSize() > (long) (WAL_HEADER_BYTES + WAL_RECORD_FIXED));
-    uint8_t flipped[1];
+    u8 flipped[1];
     {
         FILE *f = fopen(path, "rb");
         assert(f != nullptr);
@@ -440,7 +440,7 @@ int main(void) {
     Wal_free(corrupt);
 
     /* A corrupt HEADER cannot be used either. */
-    static const uint8_t badMagic[4] = { 0u, 0u, 0u, 0u };
+    static const u8 badMagic[4] = { 0u, 0u, 0u, 0u };
     poke(0u, badMagic, sizeof badMagic);
     Wal *badHeader = Wal_1(path);
     assert(badHeader != nullptr);

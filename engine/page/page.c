@@ -36,12 +36,12 @@
 /** ========================================================================
  * CLASS: Page (page/page.c)
  * STRUCT FIELDS (Mirroring page/page.h)
- *   uint8_t *bytes      borrowed page storage, `size` bytes (never owned)
- *   uint32_t size       the store's page size, power of two (sealed in)
- *   uint32_t id         this page's number within the file (sealed in)
- *   uint32_t kind       PageKind
- *   uint32_t used       admitted in-use payload bytes
- *   int32_t lastCode    last PageCode refusal
+ *   u8 *bytes      borrowed page storage, `size` bytes (never owned)
+ *   u32 size       the store's page size, power of two (sealed in)
+ *   u32 id         this page's number within the file (sealed in)
+ *   u32 kind       PageKind
+ *   u32 used       admitted in-use payload bytes
+ *   i32 lastCode    last PageCode refusal
  *   bool sealed         the seal field is valid
  *   bool dirty          caller changed bytes since the last seal
  *
@@ -59,45 +59,45 @@
  * FUNCTION REGISTRY (exports)
  *   Constructors / lifecycle:
  *     Page *Page_0(void)
- *     Page *Page_2(uint8_t *bytes, uint32_t size)
+ *     Page *Page_2(u8 *bytes, u32 size)
  *     void Page_free(Page *self)
- *     bool Page_sizeValid(uint32_t size)
+ *     bool Page_sizeValid(u32 size)
  *   Writing / admission:
- *     PageCode Page_format(Page *self, uint32_t id, uint32_t kind)
- *     PageCode Page_reset(Page *self, uint32_t kind)
- *     PageCode Page_append(Page *self, const uint8_t *src, uint32_t length)
+ *     PageCode Page_format(Page *self, u32 id, u32 kind)
+ *     PageCode Page_reset(Page *self, u32 kind)
+ *     PageCode Page_append(Page *self, const u8 *src, u32 length)
  *     PageCode Page_seal(Page *self)
  *     PageCode Page_verify(const Page *self)
  *     PageCode Page_load(Page *self)
  *   Accessors:
  *     PageCode Page_code(const Page *self)
- *     uint8_t *Page_payload(Page *self)
- *     const uint8_t *Page_payloadOf(const Page *self)
- *     uint32_t Page_used(const Page *self)
- *     uint32_t Page_capacity(const Page *self)
- *     uint32_t Page_freeSpace(const Page *self)
- *     uint32_t Page_id(const Page *self)
- *     uint32_t Page_kind(const Page *self)
- *     uint32_t Page_size(const Page *self)
- *     uint32_t Page_sealValue(const Page *self)
+ *     u8 *Page_payload(Page *self)
+ *     const u8 *Page_payloadOf(const Page *self)
+ *     u32 Page_used(const Page *self)
+ *     u32 Page_capacity(const Page *self)
+ *     u32 Page_freeSpace(const Page *self)
+ *     u32 Page_id(const Page *self)
+ *     u32 Page_kind(const Page *self)
+ *     u32 Page_size(const Page *self)
+ *     u32 Page_sealValue(const Page *self)
  *     bool Page_isSealed(const Page *self)
  *     bool Page_isDirty(const Page *self)
  *     void Page_markClean(Page *self)
  *   Naming / projections:
  *     const char *Page_codeName(PageCode code)
- *     const char *Page_kindName(uint32_t kind)
- *     bool Page_toString(const Page *self, char *dest, size_t capacity,
+ *     const char *Page_kindName(u32 kind)
+ *     bool Page_toString(const Page *self, char *dest, bytes capacity,
  *                        bool *outTruncated)
- *     bool Page_toStringStruct(const Page *self, char *dest, size_t capacity,
+ *     bool Page_toStringStruct(const Page *self, char *dest, bytes capacity,
  *                              bool *outTruncated)
  * PRIVATE HELPERS
- *   static void putU32(uint8_t *out, uint32_t value) — memory-order encoder
- *   static uint32_t getU32(const uint8_t *in) — memory-order decoder
- *   static uint8_t *payloadBytes(const Page *self) — borrowed payload area
- *   static uint32_t computeSeal(const Page *self, uint32_t used) — bounded CRC
+ *   static void putU32(u8 *out, u32 value) — memory-order encoder
+ *   static u32 getU32(const u8 *in) — memory-order decoder
+ *   static u8 *payloadBytes(const Page *self) — borrowed payload area
+ *   static u32 computeSeal(const Page *self, u32 used) — bounded CRC
  *   static void writeHeader(Page *self) — initialize an unsealed header
  *   static Page *allocPage(void) — allocate only the Page owner
- *   static bool writeNull(char *dest, size_t capacity, bool *outTruncated)
+ *   static bool writeNull(char *dest, bytes capacity, bool *outTruncated)
  *     — bounded null-owner projection
  * CONTRACT: null storage, an illegal size, a bad argument, an overflowing append, a
  * mutation of a sealed page and a damaged page are each refused through THROW with
@@ -109,30 +109,30 @@
  * mutation/destruction; borrowed storage must remain live and fully sized.
  * ======================================================================== */
 
-static void putU32(uint8_t *out, uint32_t value) {
-    out[0] = (uint8_t) value;
-    out[1] = (uint8_t) (value >> 8);
-    out[2] = (uint8_t) (value >> 16);
-    out[3] = (uint8_t) (value >> 24);
+static void putU32(u8 *out, u32 value) {
+    out[0] = (u8) value;
+    out[1] = (u8) (value >> 8);
+    out[2] = (u8) (value >> 16);
+    out[3] = (u8) (value >> 24);
 }
 
-static uint32_t getU32(const uint8_t *in) {
-    return (uint32_t) in[0] | ((uint32_t) in[1] << 8) | ((uint32_t) in[2] << 16) |
-           ((uint32_t) in[3] << 24);
+static u32 getU32(const u8 *in) {
+    return (u32) in[0] | ((u32) in[1] << 8) | ((u32) in[2] << 16) |
+           ((u32) in[3] << 24);
 }
 
-bool Page_sizeValid(uint32_t size) {
+bool Page_sizeValid(u32 size) {
     if (size < PAGE_SIZE_MIN || size > PAGE_SIZE_MAX)
         return false;
     return (size & (size - 1u)) == 0u;   // a power of two
 }
 
-static uint8_t *payloadBytes(const Page *self) {
+static u8 *payloadBytes(const Page *self) {
     return (*self).bytes + PAGE_HEADER_BYTES;
 }
 
-static uint32_t computeSeal(const Page *self, uint32_t used) {
-    uint32_t crc = Crc32_update(CRC32_SEED, (*self).bytes, PAGE_SEAL_OFFSET);
+static u32 computeSeal(const Page *self, u32 used) {
+    u32 crc = Crc32_update(CRC32_SEED, (*self).bytes, PAGE_SEAL_OFFSET);
     return Crc32_finalize(Crc32_update(crc, payloadBytes(self), used));
 }
 
@@ -159,7 +159,7 @@ static Page *allocPage(void) {
 
 Page *Page_0(void) { return allocPage(); }
 
-Page *Page_2(uint8_t *bytes, uint32_t size) {
+Page *Page_2(u8 *bytes, u32 size) {
     if (bytes == nullptr || !Page_sizeValid(size)) {
         THROW("Page_2: null storage or an illegal page size");
         return nullptr;
@@ -177,7 +177,7 @@ void Page_free(Page *self) {
         Memory_free(self);
 }
 
-PageCode Page_format(Page *self, uint32_t id, uint32_t kind) {
+PageCode Page_format(Page *self, u32 id, u32 kind) {
     if (self == nullptr || (*self).bytes == nullptr) {
         THROW("Page_format: no storage is bound");
         return PAGE_INVALID;
@@ -198,7 +198,7 @@ PageCode Page_format(Page *self, uint32_t id, uint32_t kind) {
     return PAGE_OK;
 }
 
-PageCode Page_reset(Page *self, uint32_t kind) {
+PageCode Page_reset(Page *self, u32 kind) {
     if (self == nullptr || (*self).bytes == nullptr) {
         THROW("Page_reset: no storage is bound");
         return PAGE_INVALID;
@@ -206,7 +206,7 @@ PageCode Page_reset(Page *self, uint32_t kind) {
     return Page_format(self, (*self).id, kind);
 }
 
-PageCode Page_append(Page *self, const uint8_t *src, uint32_t length) {
+PageCode Page_append(Page *self, const u8 *src, u32 length) {
     if (self == nullptr || (*self).bytes == nullptr) {
         THROW("Page_append: no storage is bound");
         return PAGE_INVALID;
@@ -221,7 +221,7 @@ PageCode Page_append(Page *self, const uint8_t *src, uint32_t length) {
         (*self).lastCode = PAGE_SEALED;
         return PAGE_SEALED;
     }
-    uint32_t capacity = (*self).size - PAGE_HEADER_BYTES;
+    u32 capacity = (*self).size - PAGE_HEADER_BYTES;
     // Checked before a single byte is copied, so a refusal is never a partial append.
     if (length > capacity - (*self).used) {
         THROW("Page_append: the payload does not fit this page");
@@ -254,19 +254,19 @@ PageCode Page_verify(const Page *self) {
         THROW("Page_verify: no storage is bound");
         return PAGE_INVALID;
     }
-    const uint8_t *bytes = (*self).bytes;
+    const u8 *bytes = (*self).bytes;
     if (getU32(bytes + 0u) != PAGE_MAGIC) {
         // Not a page at all: refuse rather than interpret arbitrary bytes.
         THROW("Page_verify: the page magic does not match");
         return PAGE_INVALID;
     }
-    uint32_t storedSize = getU32(bytes + 16u);
+    u32 storedSize = getU32(bytes + 16u);
     if (storedSize != (*self).size || !Page_sizeValid(storedSize)) {
         // A mismatched size means this is not the page the store thought it read.
         THROW("Page_verify: the page size does not match this store");
         return PAGE_INVALID;
     }
-    uint32_t used = getU32(bytes + 12u);
+    u32 used = getU32(bytes + 12u);
     if (used > (*self).size - PAGE_HEADER_BYTES) {
         THROW("Page_verify: the recorded payload length cannot fit the page");
         return PAGE_INVALID;
@@ -287,7 +287,7 @@ PageCode Page_load(Page *self) {
     PageCode code = Page_verify(self);
     if (code != PAGE_OK)
         return code;
-    const uint8_t *bytes = (*self).bytes;
+    const u8 *bytes = (*self).bytes;
     (*self).id = getU32(bytes + 4u);
     (*self).kind = getU32(bytes + 8u);
     (*self).used = getU32(bytes + 12u);
@@ -298,15 +298,15 @@ PageCode Page_load(Page *self) {
 }
 
 PageCode Page_code(const Page *self) { return self == nullptr ? PAGE_INVALID : (PageCode) (*self).lastCode; }
-uint8_t *Page_payload(Page *self) { return self == nullptr || (*self).bytes == nullptr ? nullptr : payloadBytes(self); }
-const uint8_t *Page_payloadOf(const Page *self) { return self == nullptr || (*self).bytes == nullptr ? nullptr : payloadBytes(self); }
-uint32_t Page_used(const Page *self) { return self == nullptr ? 0u : (*self).used; }
-uint32_t Page_capacity(const Page *self) { return self == nullptr ? 0u : (*self).size - PAGE_HEADER_BYTES; }
-uint32_t Page_freeSpace(const Page *self) { return self == nullptr ? 0u : Page_capacity(self) - (*self).used; }
-uint32_t Page_id(const Page *self) { return self == nullptr ? 0u : (*self).id; }
-uint32_t Page_kind(const Page *self) { return self == nullptr ? 0u : (*self).kind; }
-uint32_t Page_size(const Page *self) { return self == nullptr ? 0u : (*self).size; }
-uint32_t Page_sealValue(const Page *self) {
+u8 *Page_payload(Page *self) { return self == nullptr || (*self).bytes == nullptr ? nullptr : payloadBytes(self); }
+const u8 *Page_payloadOf(const Page *self) { return self == nullptr || (*self).bytes == nullptr ? nullptr : payloadBytes(self); }
+u32 Page_used(const Page *self) { return self == nullptr ? 0u : (*self).used; }
+u32 Page_capacity(const Page *self) { return self == nullptr ? 0u : (*self).size - PAGE_HEADER_BYTES; }
+u32 Page_freeSpace(const Page *self) { return self == nullptr ? 0u : Page_capacity(self) - (*self).used; }
+u32 Page_id(const Page *self) { return self == nullptr ? 0u : (*self).id; }
+u32 Page_kind(const Page *self) { return self == nullptr ? 0u : (*self).kind; }
+u32 Page_size(const Page *self) { return self == nullptr ? 0u : (*self).size; }
+u32 Page_sealValue(const Page *self) {
     return self == nullptr || (*self).bytes == nullptr ? 0u : getU32((*self).bytes + PAGE_SEAL_OFFSET);
 }
 bool Page_isSealed(const Page *self) { return self != nullptr && (*self).sealed; }
@@ -325,7 +325,7 @@ const char *Page_codeName(PageCode code) {
     }
 }
 
-const char *Page_kindName(uint32_t kind) {
+const char *Page_kindName(u32 kind) {
     switch (kind) {
         case PAGE_KIND_FREE:     return "free";
         case PAGE_KIND_LEAF:     return "leaf";
@@ -336,11 +336,11 @@ const char *Page_kindName(uint32_t kind) {
     }
 }
 
-static bool writeNull(char *dest, size_t capacity, bool *outTruncated) {
+static bool writeNull(char *dest, bytes capacity, bool *outTruncated) {
     const char *text = "nullptr";
-    size_t length = strlen(text);
+    bytes length = strlen(text);
     bool cut = length + 1u > capacity;
-    size_t copy = cut ? capacity - 1u : length;
+    bytes copy = cut ? capacity - 1u : length;
     if (capacity > 0u) {
         memcpy(dest, text, copy);
         dest[copy] = '\0';
@@ -350,7 +350,7 @@ static bool writeNull(char *dest, size_t capacity, bool *outTruncated) {
     return !cut;
 }
 
-bool Page_toString(const Page *self, char *dest, size_t capacity, bool *outTruncated) {
+bool Page_toString(const Page *self, char *dest, bytes capacity, bool *outTruncated) {
     if (dest == nullptr || capacity == 0u) {
         if (outTruncated != nullptr)
             *outTruncated = true;
@@ -362,13 +362,13 @@ bool Page_toString(const Page *self, char *dest, size_t capacity, bool *outTrunc
     int written = snprintf(dest, capacity, "Page(id=%u, kind=%s, used=%u/%u, sealed=%d)",
                            Page_id(self), Page_kindName(Page_kind(self)), Page_used(self),
                            Page_capacity(self), Page_isSealed(self) ? 1 : 0);
-    bool cut = written < 0 || (size_t) written >= capacity;
+    bool cut = written < 0 || (bytes) written >= capacity;
     if (outTruncated != nullptr)
         *outTruncated = cut;
     return !cut;
 }
 
-bool Page_toStringStruct(const Page *self, char *dest, size_t capacity, bool *outTruncated) {
+bool Page_toStringStruct(const Page *self, char *dest, bytes capacity, bool *outTruncated) {
     if (dest == nullptr || capacity == 0u) {
         if (outTruncated != nullptr)
             *outTruncated = true;
@@ -384,7 +384,7 @@ bool Page_toStringStruct(const Page *self, char *dest, size_t capacity, bool *ou
                            Page_kindName(Page_kind(self)), Page_used(self),
                            Page_codeName(Page_code(self)), Page_isSealed(self) ? 1 : 0,
                            Page_isDirty(self) ? 1 : 0, Page_freeSpace(self), Page_sealValue(self));
-    bool cut = written < 0 || (size_t) written >= capacity;
+    bool cut = written < 0 || (bytes) written >= capacity;
     if (outTruncated != nullptr)
         *outTruncated = cut;
     return !cut;

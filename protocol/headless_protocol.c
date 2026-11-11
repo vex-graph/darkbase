@@ -18,46 +18,46 @@
 /** ========================================================================
  * CLASS: HeadlessProtocol (protocol/headless_protocol.c)
  * STRUCT FIELDS (Mirroring protocol/headless_protocol.h)
- *   uint8_t *buffer           borrowed frame backing, never formatted
- *   size_t capacity           admitted backing extent
- *   size_t used               initialized bytes in current frame
- *   size_t expected           total length decoded from prefix, zero until known
- *   uint64_t exhaustionCount  saturated capacity-refusal count this reset epoch
- *   uint32_t code             latest typed local result
+ *   u8 *buffer           borrowed frame backing, never formatted
+ *   bytes capacity           admitted backing extent
+ *   bytes used               initialized bytes in current frame
+ *   bytes expected           total length decoded from prefix, zero until known
+ *   u64 exhaustionCount  saturated capacity-refusal count this reset epoch
+ *   u32 code             latest typed local result
  *   bool ready                full validated envelope admitted
  *   bool failed               stream cannot continue without explicit reset
  * FUNCTION REGISTRY — exports:
  * CONSTRUCTORS:
  *   HeadlessProtocol HeadlessProtocol_0(void)
- *   HeadlessProtocol HeadlessProtocol_2(uint8_t *buffer, size_t capacity)
+ *   HeadlessProtocol HeadlessProtocol_2(u8 *buffer, bytes capacity)
  * CORE / LIFECYCLE:
- *   bool HeadlessProtocol_feed(HeadlessProtocol *self, const uint8_t *bytes,
- *                              size_t length, size_t *outConsumed)
+ *   bool HeadlessProtocol_feed(HeadlessProtocol *self, const u8 *bytes,
+ *                              bytes length, bytes *outConsumed)
  *   bool HeadlessProtocol_finish(HeadlessProtocol *self)
  *   bool HeadlessProtocol_release(HeadlessProtocol *self)
  *   void HeadlessProtocol_reset(HeadlessProtocol *self)
  * QUERIES / BORROWED VIEWS:
  *   bool HeadlessProtocol_isReady(const HeadlessProtocol *self)
  *   bool HeadlessProtocol_isFailed(const HeadlessProtocol *self)
- *   uint32_t HeadlessProtocol_getCode(const HeadlessProtocol *self)
- *   uint64_t HeadlessProtocol_getExhaustionCount(const HeadlessProtocol *self)
- *   size_t HeadlessProtocol_getCapacity(const HeadlessProtocol *self)
- *   size_t HeadlessProtocol_getUsed(const HeadlessProtocol *self)
- *   size_t HeadlessProtocol_getExpected(const HeadlessProtocol *self)
- *   uint16_t HeadlessProtocol_getKind(const HeadlessProtocol *self)
- *   uint16_t HeadlessProtocol_getOperation(const HeadlessProtocol *self)
- *   uint16_t HeadlessProtocol_getStatus(const HeadlessProtocol *self)
- *   uint32_t HeadlessProtocol_getRequestId(const HeadlessProtocol *self)
- *   const uint8_t *HeadlessProtocol_getPayload(const HeadlessProtocol *self)
- *   size_t HeadlessProtocol_getPayloadLength(const HeadlessProtocol *self)
+ *   u32 HeadlessProtocol_getCode(const HeadlessProtocol *self)
+ *   u64 HeadlessProtocol_getExhaustionCount(const HeadlessProtocol *self)
+ *   bytes HeadlessProtocol_getCapacity(const HeadlessProtocol *self)
+ *   bytes HeadlessProtocol_getUsed(const HeadlessProtocol *self)
+ *   bytes HeadlessProtocol_getExpected(const HeadlessProtocol *self)
+ *   u16 HeadlessProtocol_getKind(const HeadlessProtocol *self)
+ *   u16 HeadlessProtocol_getOperation(const HeadlessProtocol *self)
+ *   u16 HeadlessProtocol_getStatus(const HeadlessProtocol *self)
+ *   u32 HeadlessProtocol_getRequestId(const HeadlessProtocol *self)
+ *   const u8 *HeadlessProtocol_getPayload(const HeadlessProtocol *self)
+ *   bytes HeadlessProtocol_getPayloadLength(const HeadlessProtocol *self)
  * ENCODING / PROJECTIONS:
- *   bool HeadlessProtocol_encode(uint16_t kind, uint16_t operation,
- *       uint16_t status, uint32_t requestId, const uint8_t *payload, size_t length,
- *       uint8_t *dest, size_t capacity, size_t *outLength, bool *outTruncated)
+ *   bool HeadlessProtocol_encode(u16 kind, u16 operation,
+ *       u16 status, u32 requestId, const u8 *payload, bytes length,
+ *       u8 *dest, bytes capacity, bytes *outLength, bool *outTruncated)
  *   bool HeadlessProtocol_toString(const HeadlessProtocol *self, char *dest,
- *                                  size_t capacity, bool *outTruncated)
+ *                                  bytes capacity, bool *outTruncated)
  *   bool HeadlessProtocol_toStringStruct(const HeadlessProtocol *self, char *dest,
- *                                        size_t capacity, bool *outTruncated)
+ *                                        bytes capacity, bool *outTruncated)
  * PRIVATE FUNCTIONS:
  *   read16/read32, write16/write32 — bytewise unaligned wire access
  *   validHeader — v1 kind/status/identity invariant, unknown operations opaque
@@ -72,32 +72,32 @@
 
 ;;INTENTION("Per the Conflict Triage Law and Single Class Per File Law (Java Law), derived frame counts/backing/readiness change only through constructor/feed/release/reset; setters cannot forge initialized bytes or payload lifetime.")
 
-static uint16_t read16(const uint8_t *p) {
-    return (uint16_t) ((uint16_t) p[0] | ((uint16_t) p[1] << 8u));
+static u16 read16(const u8 *p) {
+    return (u16) ((u16) p[0] | ((u16) p[1] << 8u));
 }
 
-static uint32_t read32(const uint8_t *p) {
-    return (uint32_t) p[0] | ((uint32_t) p[1] << 8u) |
-        ((uint32_t) p[2] << 16u) | ((uint32_t) p[3] << 24u);
+static u32 read32(const u8 *p) {
+    return (u32) p[0] | ((u32) p[1] << 8u) |
+        ((u32) p[2] << 16u) | ((u32) p[3] << 24u);
 }
 
-static void write16(uint16_t value, uint8_t *p) {
-    p[0] = (uint8_t) value;
-    p[1] = (uint8_t) (value >> 8u);
+static void write16(u16 value, u8 *p) {
+    p[0] = (u8) value;
+    p[1] = (u8) (value >> 8u);
 }
 
-static void write32(uint32_t value, uint8_t *p) {
+static void write32(u32 value, u8 *p) {
     for (unsigned i = 0u; i < 4u; ++i)
-        p[i] = (uint8_t) (value >> (i * 8u));
+        p[i] = (u8) (value >> (i * 8u));
 }
 
-static bool validHeader(uint16_t kind, uint16_t operation, uint16_t status, uint32_t id) {
+static bool validHeader(u16 kind, u16 operation, u16 status, u32 id) {
     return id != 0u && operation != 0u &&
         ((kind == HEADLESS_WIRE_REQUEST && status == HEADLESS_WIRE_OK) ||
          (kind == HEADLESS_WIRE_RESPONSE && status <= HEADLESS_WIRE_INTERNAL_ERROR));
 }
 
-static bool reject(HeadlessProtocol *self, uint32_t code, bool terminal) {
+static bool reject(HeadlessProtocol *self, u32 code, bool terminal) {
     if (self != nullptr) {
         (*self).code = code;
         (*self).failed = (*self).failed || terminal;
@@ -119,7 +119,7 @@ HeadlessProtocol HeadlessProtocol_0(void) {
     return (HeadlessProtocol) {0};
 }
 
-HeadlessProtocol HeadlessProtocol_2(uint8_t *buffer, size_t capacity) {
+HeadlessProtocol HeadlessProtocol_2(u8 *buffer, bytes capacity) {
     HeadlessProtocol self = HeadlessProtocol_0();
     if (buffer == nullptr || capacity < HEADLESS_WIRE_HEADER_BYTES ||
         capacity > HEADLESS_WIRE_MAX_BYTES) {
@@ -131,8 +131,8 @@ HeadlessProtocol HeadlessProtocol_2(uint8_t *buffer, size_t capacity) {
     return self;
 }
 
-bool HeadlessProtocol_feed(HeadlessProtocol *self, const uint8_t *bytes,
-                           size_t length, size_t *outConsumed) {
+bool HeadlessProtocol_feed(HeadlessProtocol *self, const u8 *bytes,
+                           bytes length, bytes *outConsumed) {
     if (outConsumed != nullptr)
         *outConsumed = 0u;
     if (self == nullptr || outConsumed == nullptr || (bytes == nullptr && length != 0u))
@@ -147,25 +147,25 @@ bool HeadlessProtocol_feed(HeadlessProtocol *self, const uint8_t *bytes,
     if ((*self).ready)
         return reject(self, HEADLESS_PROTOCOL_BUSY, false);
     while (*outConsumed < length) {
-        size_t target = (*self).expected == 0u ? HEADLESS_WIRE_PREFIX_BYTES : (*self).expected;
-        size_t copy = target - (*self).used;
-        size_t remaining = length - *outConsumed;
+        bytes target = (*self).expected == 0u ? HEADLESS_WIRE_PREFIX_BYTES : (*self).expected;
+        bytes copy = target - (*self).used;
+        bytes remaining = length - *outConsumed;
         if (copy > remaining)
             copy = remaining;
         memcpy((*self).buffer + (*self).used, bytes + *outConsumed, copy);
         (*self).used += copy;
         *outConsumed += copy;
         if ((*self).expected == 0u && (*self).used == HEADLESS_WIRE_PREFIX_BYTES) {
-            uint32_t body = read32((*self).buffer);
+            u32 body = read32((*self).buffer);
             if (body < HEADLESS_WIRE_HEADER_BYTES - HEADLESS_WIRE_PREFIX_BYTES ||
                 body > HEADLESS_WIRE_MAX_BYTES - HEADLESS_WIRE_PREFIX_BYTES)
                 return reject(self, HEADLESS_PROTOCOL_LENGTH, true);
-            (*self).expected = (size_t) body + HEADLESS_WIRE_PREFIX_BYTES;
+            (*self).expected = (bytes) body + HEADLESS_WIRE_PREFIX_BYTES;
             if ((*self).expected > (*self).capacity)
                 return reject(self, HEADLESS_PROTOCOL_CAPACITY, true);
         }
         if ((*self).expected != 0u && (*self).used == (*self).expected) {
-            const uint8_t *header = (*self).buffer;
+            const u8 *header = (*self).buffer;
             if (read16(header + 4u) != HEADLESS_WIRE_VERSION)
                 return reject(self, HEADLESS_PROTOCOL_VERSION, true);
             if (!validHeader(read16(header + 6u), read16(header + 8u),
@@ -205,7 +205,7 @@ void HeadlessProtocol_reset(HeadlessProtocol *self) {
 bool HeadlessProtocol_release(HeadlessProtocol *self) {
     if (!HeadlessProtocol_isReady(self))
         return reject(self, HEADLESS_PROTOCOL_INVALID, false);
-    uint64_t count = (*self).exhaustionCount;
+    u64 count = (*self).exhaustionCount;
     HeadlessProtocol_reset(self);
     (*self).exhaustionCount = count;
     return true;
@@ -219,53 +219,53 @@ bool HeadlessProtocol_isFailed(const HeadlessProtocol *self) {
     return self != nullptr && (*self).failed;
 }
 
-uint32_t HeadlessProtocol_getCode(const HeadlessProtocol *self) {
+u32 HeadlessProtocol_getCode(const HeadlessProtocol *self) {
     return self == nullptr ? HEADLESS_PROTOCOL_INVALID : (*self).code;
 }
 
-uint64_t HeadlessProtocol_getExhaustionCount(const HeadlessProtocol *self) {
+u64 HeadlessProtocol_getExhaustionCount(const HeadlessProtocol *self) {
     return self == nullptr ? 0u : (*self).exhaustionCount;
 }
 
-size_t HeadlessProtocol_getCapacity(const HeadlessProtocol *self) {
+bytes HeadlessProtocol_getCapacity(const HeadlessProtocol *self) {
     return self == nullptr ? 0u : (*self).capacity;
 }
 
-size_t HeadlessProtocol_getUsed(const HeadlessProtocol *self) {
+bytes HeadlessProtocol_getUsed(const HeadlessProtocol *self) {
     return self == nullptr ? 0u : (*self).used;
 }
 
-size_t HeadlessProtocol_getExpected(const HeadlessProtocol *self) {
+bytes HeadlessProtocol_getExpected(const HeadlessProtocol *self) {
     return self == nullptr ? 0u : (*self).expected;
 }
 
-uint16_t HeadlessProtocol_getKind(const HeadlessProtocol *self) {
+u16 HeadlessProtocol_getKind(const HeadlessProtocol *self) {
     return HeadlessProtocol_isReady(self) ? read16((*self).buffer + 6u) : 0u;
 }
 
-uint16_t HeadlessProtocol_getOperation(const HeadlessProtocol *self) {
+u16 HeadlessProtocol_getOperation(const HeadlessProtocol *self) {
     return HeadlessProtocol_isReady(self) ? read16((*self).buffer + 8u) : 0u;
 }
 
-uint16_t HeadlessProtocol_getStatus(const HeadlessProtocol *self) {
+u16 HeadlessProtocol_getStatus(const HeadlessProtocol *self) {
     return HeadlessProtocol_isReady(self) ? read16((*self).buffer + 10u) : 0u;
 }
 
-uint32_t HeadlessProtocol_getRequestId(const HeadlessProtocol *self) {
+u32 HeadlessProtocol_getRequestId(const HeadlessProtocol *self) {
     return HeadlessProtocol_isReady(self) ? read32((*self).buffer + 12u) : 0u;
 }
 
-const uint8_t *HeadlessProtocol_getPayload(const HeadlessProtocol *self) {
+const u8 *HeadlessProtocol_getPayload(const HeadlessProtocol *self) {
     return HeadlessProtocol_isReady(self) ? (*self).buffer + HEADLESS_WIRE_HEADER_BYTES : nullptr;
 }
 
-size_t HeadlessProtocol_getPayloadLength(const HeadlessProtocol *self) {
+bytes HeadlessProtocol_getPayloadLength(const HeadlessProtocol *self) {
     return HeadlessProtocol_isReady(self) ? (*self).used - HEADLESS_WIRE_HEADER_BYTES : 0u;
 }
 
-bool HeadlessProtocol_encode(uint16_t kind, uint16_t operation, uint16_t status,
-    uint32_t requestId, const uint8_t *payload, size_t length,
-    uint8_t *dest, size_t capacity, size_t *outLength, bool *outTruncated) {
+bool HeadlessProtocol_encode(u16 kind, u16 operation, u16 status,
+    u32 requestId, const u8 *payload, bytes length,
+    u8 *dest, bytes capacity, bytes *outLength, bool *outTruncated) {
     if (outLength != nullptr)
         *outLength = 0u;
     if (outTruncated != nullptr)
@@ -275,12 +275,12 @@ bool HeadlessProtocol_encode(uint16_t kind, uint16_t operation, uint16_t status,
         length > HEADLESS_WIRE_MAX_BYTES - HEADLESS_WIRE_HEADER_BYTES ||
         !validHeader(kind, operation, status, requestId))
         return reject(nullptr, HEADLESS_PROTOCOL_INVALID, false);
-    size_t total = HEADLESS_WIRE_HEADER_BYTES + length;
+    bytes total = HEADLESS_WIRE_HEADER_BYTES + length;
     if (capacity < total) {
         *outTruncated = true;
         return reject(nullptr, HEADLESS_PROTOCOL_CAPACITY, false);
     }
-    write32((uint32_t) (total - HEADLESS_WIRE_PREFIX_BYTES), dest);
+    write32((u32) (total - HEADLESS_WIRE_PREFIX_BYTES), dest);
     write16(HEADLESS_WIRE_VERSION, dest + 4u);
     write16(kind, dest + 6u);
     write16(operation, dest + 8u);
@@ -293,7 +293,7 @@ bool HeadlessProtocol_encode(uint16_t kind, uint16_t operation, uint16_t status,
 }
 
 static bool project(const HeadlessProtocol *self, bool structure, char *dest,
-                    size_t capacity, bool *outTruncated) {
+                    bytes capacity, bool *outTruncated) {
     if (outTruncated != nullptr)
         *outTruncated = false;
     if (dest == nullptr || capacity == 0u) {
@@ -313,18 +313,18 @@ static bool project(const HeadlessProtocol *self, bool structure, char *dest,
     else
         length = snprintf(dest, capacity, "HeadlessProtocol{ready:%u,failed:%u}",
                            (unsigned) (*self).ready, (unsigned) (*self).failed);
-    bool complete = length >= 0 && (size_t) length < capacity;
+    bool complete = length >= 0 && (bytes) length < capacity;
     if (outTruncated != nullptr)
         *outTruncated = !complete;
     return complete;
 }
 
 bool HeadlessProtocol_toString(const HeadlessProtocol *self, char *dest,
-                               size_t capacity, bool *outTruncated) {
+                               bytes capacity, bool *outTruncated) {
     return project(self, false, dest, capacity, outTruncated);
 }
 
 bool HeadlessProtocol_toStringStruct(const HeadlessProtocol *self, char *dest,
-                                     size_t capacity, bool *outTruncated) {
+                                     bytes capacity, bool *outTruncated) {
     return project(self, true, dest, capacity, outTruncated);
 }

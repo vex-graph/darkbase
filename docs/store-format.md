@@ -171,7 +171,7 @@ count and remains usable after Store close. An out-of-range index returns
 the caller still supplies matching reflected `Struct`s before loading rows.
 
 Each entity's descriptor is followed by its raw row span and then, when the
-entity declares an index, by one `{int32_t key; uint32_t rowIndex}` record per
+entity declares an index, by one `{i32 key; u32 rowIndex}` record per
 row. Both live in the same catalog payload, so the single root-page publication
 publishes rows and index together and they cannot tear apart. The loader
 re-validates each record before publishing anything — key ordering, `rowIndex`

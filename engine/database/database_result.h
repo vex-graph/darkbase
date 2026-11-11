@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "c23/constructor.h"
+#include "util/constructor.h"
 #include "struct/chunked_list.h"
 
 // database/database_result.h — the DatabaseResult row cursor.
@@ -18,9 +18,9 @@
 
 typedef struct DatabaseResult {
     ChunkedList *rows; // borrowed rows, or an owned list of borrowed row pointers
-    uint32_t count;    // published rows snapshotted at construction
-    uint32_t cursor;   // index of the next row to hand out
-    uint32_t ownsRows;  // owns list storage only; never owns the row pointers
+    u32 count;    // published rows snapshotted at construction
+    u32 cursor;   // index of the next row to hand out
+    u32 ownsRows;  // owns list storage only; never owns the row pointers
 } DatabaseResult;
 
 // --- Constructors ---
@@ -36,21 +36,21 @@ DatabaseResult *DatabaseResult_2(ChunkedList *source, bool ownsSource);
 // set. Row values are always borrowed.
 void DatabaseResult_free(DatabaseResult *self);
 
-uint64_t DatabaseResult_kind(const DatabaseResult *self);
-bool DatabaseResult_check(const DatabaseResult *self, uint64_t typeId);
+u64 DatabaseResult_kind(const DatabaseResult *self);
+bool DatabaseResult_check(const DatabaseResult *self, u64 typeId);
 
 // --- Core functions ---
 // Advance and write the next row pointer into outRow (dest-last). False at the
 // end of the result or on a null argument; outRow is untouched on false.
 bool DatabaseResult_next(DatabaseResult *self, void **outRow);
 // Rows snapshotted at construction.
-uint32_t DatabaseResult_count(const DatabaseResult *self);
+u32 DatabaseResult_count(const DatabaseResult *self);
 // Index of the next row (== consumed rows).
-uint32_t DatabaseResult_position(const DatabaseResult *self);
+u32 DatabaseResult_position(const DatabaseResult *self);
 // Reset the cursor to the first row.
 void DatabaseResult_rewind(DatabaseResult *self);
 
-void DatabaseResult_toString(const DatabaseResult *self, char *dest, size_t cap, bool *outTruncated);
-void DatabaseResult_toStringStruct(const DatabaseResult *self, char *dest, size_t cap, bool *outTruncated);
+void DatabaseResult_toString(const DatabaseResult *self, char *dest, bytes cap, bool *outTruncated);
+void DatabaseResult_toStringStruct(const DatabaseResult *self, char *dest, bytes cap, bool *outTruncated);
 
 #endif

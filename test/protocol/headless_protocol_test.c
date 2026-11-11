@@ -11,18 +11,18 @@ static unsigned diagnostics;
 
 // Known byte oracle, all stream splits, retained tail, request/response and busy.
 static void roundtrip(void) {
-    const uint8_t payload[] = {0u, 255u, 's', 'e', 'c', 'r', 'e', 't'};
-    const uint8_t golden[] = {20,0,0,0, 1,0, 1,0, 2,0, 0,0, 4,3,2,1,
+    const u8 payload[] = {0u, 255u, 's', 'e', 'c', 'r', 'e', 't'};
+    const u8 golden[] = {20,0,0,0, 1,0, 1,0, 2,0, 0,0, 4,3,2,1,
                               0,255,'s','e','c','r','e','t'};
-    uint8_t encoded[128], backing[128];
-    size_t length = SIZE_MAX;
+    u8 encoded[128], backing[128];
+    bytes length = SIZE_MAX;
     bool truncated = true;
     assert(HeadlessProtocol_encode(HEADLESS_WIRE_REQUEST, 2u, HEADLESS_WIRE_OK,
         0x01020304u, payload, sizeof payload, encoded, sizeof encoded, &length, &truncated));
     assert(length == sizeof golden && !truncated && memcmp(encoded, golden, length) == 0);
-    for (size_t split = 0u; split <= length; ++split) {
+    for (bytes split = 0u; split <= length; ++split) {
         HeadlessProtocol protocol = HeadlessProtocol(backing, sizeof backing);
-        size_t used = SIZE_MAX;
+        bytes used = SIZE_MAX;
         assert(HeadlessProtocol_feed(&protocol, encoded, split, &used) && used == split);
         if (split != length)
             assert(HeadlessProtocol_feed(&protocol, encoded + split, length - split, &used));
@@ -42,23 +42,23 @@ static void roundtrip(void) {
         assert(used == 0u && HeadlessProtocol_getCode(&protocol) == HEADLESS_PROTOCOL_BUSY);
         assert(memcmp(HeadlessProtocol_getPayload(&protocol), payload, sizeof payload) == 0);
         assert(HeadlessProtocol_release(&protocol));
-        for (size_t i = 0u; i < length; ++i)
+        for (bytes i = 0u; i < length; ++i)
             assert(backing[i] == 0u);
         assert(HeadlessProtocol_getPayload(&protocol) == nullptr);
     }
     memcpy(encoded + length, golden, sizeof golden);
     HeadlessProtocol protocol = HeadlessProtocol(backing, sizeof backing);
-    size_t used = 0u;
+    bytes used = 0u;
     assert(HeadlessProtocol_feed(&protocol, encoded, length * 2u, &used));
     assert(used == length); // coalesced second frame stays with host until release
     assert(HeadlessProtocol_release(&protocol));
     assert(HeadlessProtocol_feed(&protocol, encoded + used, length, &used));
     assert(HeadlessProtocol_isReady(&protocol));
     HeadlessProtocol_reset(&protocol);
-    for (uint16_t status = HEADLESS_WIRE_OK; status <= HEADLESS_WIRE_INTERNAL_ERROR; ++status) {
+    for (u16 status = HEADLESS_WIRE_OK; status <= HEADLESS_WIRE_INTERNAL_ERROR; ++status) {
         assert(HeadlessProtocol_encode(HEADLESS_WIRE_RESPONSE, UINT16_MAX, status,
             UINT32_MAX, nullptr, 0u, encoded, sizeof encoded, &length, &truncated));
-        for (size_t i = 0u; i < length; ++i) {
+        for (bytes i = 0u; i < length; ++i) {
             assert(HeadlessProtocol_feed(&protocol, encoded + i, 1u, &used));
             assert(used == 1u);
         }
@@ -72,12 +72,12 @@ static void roundtrip(void) {
 
 // Every truncation, each header constraint, explicit terminal latch and reset.
 static void hostile(void) {
-    uint8_t encoded[64], backing[64];
-    size_t length, used;
+    u8 encoded[64], backing[64];
+    bytes length, used;
     bool truncated;
     assert(HeadlessProtocol_encode(1u, 1u, 0u, 1u, nullptr, 0u,
                                    encoded, sizeof encoded, &length, &truncated));
-    for (size_t cut = 1u; cut < length; ++cut) {
+    for (bytes cut = 1u; cut < length; ++cut) {
         HeadlessProtocol protocol = HeadlessProtocol(backing, sizeof backing);
         assert(HeadlessProtocol_feed(&protocol, encoded, cut, &used));
         REFUSES(HeadlessProtocol_finish(&protocol));
@@ -91,9 +91,9 @@ static void hostile(void) {
         assert(HeadlessProtocol_isReady(&protocol));
     }
     const unsigned offsets[] = {0u, 0u, 0u, 4u, 6u, 8u, 10u, 12u};
-    const uint8_t values[] = {0u, 11u, 255u, 2u, 3u, 0u, 1u, 0u};
-    for (size_t i = 0u; i < sizeof values; ++i) {
-        uint8_t bad[64];
+    const u8 values[] = {0u, 11u, 255u, 2u, 3u, 0u, 1u, 0u};
+    for (bytes i = 0u; i < sizeof values; ++i) {
+        u8 bad[64];
         memcpy(bad, encoded, length);
         bad[offsets[i]] = values[i];
         if (i == 2u)
@@ -122,20 +122,20 @@ static void hostile(void) {
 
 // Exact protocol maximum with full payload comparison and canary; output atomicity.
 static void boundaries(void) {
-    static uint8_t payload[HEADLESS_WIRE_MAX_BYTES];
-    static uint8_t encoded[HEADLESS_WIRE_MAX_BYTES + 1u];
-    static uint8_t backing[HEADLESS_WIRE_MAX_BYTES + 1u];
-    for (size_t i = 0u; i < sizeof payload; ++i)
-        payload[i] = (uint8_t) (i * 37u); // deterministic full retained payload
-    size_t length;
+    static u8 payload[HEADLESS_WIRE_MAX_BYTES];
+    static u8 encoded[HEADLESS_WIRE_MAX_BYTES + 1u];
+    static u8 backing[HEADLESS_WIRE_MAX_BYTES + 1u];
+    for (bytes i = 0u; i < sizeof payload; ++i)
+        payload[i] = (u8) (i * 37u); // deterministic full retained payload
+    bytes length;
     bool truncated;
-    size_t maximumPayload = HEADLESS_WIRE_MAX_BYTES - HEADLESS_WIRE_HEADER_BYTES;
+    bytes maximumPayload = HEADLESS_WIRE_MAX_BYTES - HEADLESS_WIRE_HEADER_BYTES;
     memset(encoded, 0xa5, sizeof encoded);
     memset(backing, 0xa5, sizeof backing);
     assert(HeadlessProtocol_encode(1u, 1u, 0u, 1u, payload, maximumPayload,
                                    encoded, HEADLESS_WIRE_MAX_BYTES, &length, &truncated));
     HeadlessProtocol protocol = HeadlessProtocol(backing, HEADLESS_WIRE_MAX_BYTES);
-    size_t used;
+    bytes used;
     assert(HeadlessProtocol_feed(&protocol, encoded, length, &used));
     assert(used == HEADLESS_WIRE_MAX_BYTES && HeadlessProtocol_isReady(&protocol));
     assert(memcmp(HeadlessProtocol_getPayload(&protocol), payload, maximumPayload) == 0);
@@ -145,7 +145,7 @@ static void boundaries(void) {
     REFUSES(HeadlessProtocol_encode(1u, 1u, 0u, 1u, payload, maximumPayload,
         encoded, HEADLESS_WIRE_MAX_BYTES - 1u, &length, &truncated));
     assert(length == 0u && truncated);
-    for (size_t i = 0u; i < sizeof encoded; ++i)
+    for (bytes i = 0u; i < sizeof encoded; ++i)
         assert(encoded[i] == 0xa5);
     REFUSES(HeadlessProtocol_encode(1u, 1u, 0u, 1u, payload, maximumPayload + 1u,
                                    encoded, sizeof encoded, &length, &truncated));
@@ -159,8 +159,8 @@ static void boundaries(void) {
 
 // Null/defaults, API misuse preservation, every public constructor/projection.
 static void defaults(void) {
-    uint8_t backing[64];
-    size_t used = SIZE_MAX, length;
+    u8 backing[64];
+    bytes used = SIZE_MAX, length;
     bool truncated;
     HeadlessProtocol protocol = HeadlessProtocol();
     HeadlessProtocol zero = HeadlessProtocol_zero();

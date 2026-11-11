@@ -48,11 +48,11 @@
  *   bool started                  database and admin record admitted
  *   bool adminAuthenticated       current process-local admin session
  *   bool acceptRequests           explicit runtime admission gate
- *   uint32_t passwordIterations   configured PBKDF2 work factor
+ *   u32 passwordIterations   configured PBKDF2 work factor
  * PRIVATE HELPERS
- *   HeadlessAdminRecord { uint8_t passwordSalt[16]; uint8_t passwordHash[32];
- *     uint32_t iterations; uint32_t passwordChangeRequired;
- *     uint32_t acceptRequestsPreference; uint64_t lastTotpStep; }
+ *   HeadlessAdminRecord { u8 passwordSalt[16]; u8 passwordHash[32];
+ *     u32 iterations; u32 passwordChangeRequired;
+ *     u32 acceptRequestsPreference; u64 lastTotpStep; }
  *   persistRecord(self, row, replacement) save with in-memory rollback
  *   adminRecord(self)                  private row lookup
  *   verifyPasswordTotp(...)            cold credential verification
@@ -74,12 +74,12 @@
  * projections or diagnostics. ======================================================================== */
 
 typedef struct HeadlessAdminRecord {
-    uint8_t passwordSalt[HEADLESS_SALT_BYTES]; // PBKDF2 salt
-    uint8_t passwordHash[HEADLESS_PASSWORD_BYTES]; // PBKDF2-SHA256 result
-    uint32_t iterations; // derivation cost recorded with the hash
-    uint32_t passwordChangeRequired; // one-time bootstrap barrier
-    uint32_t acceptRequestsPreference; // durable explicit enable preference
-    uint64_t lastTotpStep; // durable replay rejection watermark
+    u8 passwordSalt[HEADLESS_SALT_BYTES]; // PBKDF2 salt
+    u8 passwordHash[HEADLESS_PASSWORD_BYTES]; // PBKDF2-SHA256 result
+    u32 iterations; // derivation cost recorded with the hash
+    u32 passwordChangeRequired; // one-time bootstrap barrier
+    u32 acceptRequestsPreference; // durable explicit enable preference
+    u64 lastTotpStep; // durable replay rejection watermark
 } HeadlessAdminRecord;
 
 struct HeadlessService {
@@ -94,7 +94,7 @@ struct HeadlessService {
     bool started;
     bool adminAuthenticated;
     bool acceptRequests;
-    uint32_t passwordIterations;
+    u32 passwordIterations;
 };
 
 static bool persistRecord(HeadlessService *self, HeadlessAdminRecord *record,
@@ -114,12 +114,12 @@ static HeadlessAdminRecord *adminRecord(HeadlessService *self) {
 }
 
 static bool verifyPasswordTotp(HeadlessService *self, const char *password,
-                               uint32_t code, uint64_t unixTimeSeconds,
-                               HeadlessAdminRecord *record, uint64_t *outAcceptedStep) {
+                               u32 code, u64 unixTimeSeconds,
+                               HeadlessAdminRecord *record, u64 *outAcceptedStep) {
     if (self == nullptr || password == nullptr || record == nullptr || outAcceptedStep == nullptr)
         return false;
-    uint8_t secret[HEADLESS_ADMIN_SECRET_BYTES];
-    size_t secretLength = 0u;
+    u8 secret[HEADLESS_ADMIN_SECRET_BYTES];
+    bytes secretLength = 0u;
     if ((*self).load == nullptr || !(*self).load((*self).context, HEADLESS_ADMIN_SERVICE,
             HEADLESS_ADMIN_ACCOUNT, secret, sizeof secret, &secretLength) ||
         secretLength != sizeof secret) {
@@ -129,7 +129,7 @@ static bool verifyPasswordTotp(HeadlessService *self, const char *password,
     bool passwordValid = Password_verifySha256(password, (*record).passwordSalt,
         sizeof (*record).passwordSalt, (*record).iterations, (*record).passwordHash,
         sizeof (*record).passwordHash);
-    uint64_t accepted = (*record).lastTotpStep;
+    u64 accepted = (*record).lastTotpStep;
     bool totpValid = Totp_verify(secret, secretLength, code, unixTimeSeconds,
         TOTP_DIGITS_DEFAULT, TOTP_STEP_SECONDS_DEFAULT, TOTP_WINDOW_DEFAULT, &accepted);
     memset(secret, 0, sizeof secret);
@@ -156,7 +156,7 @@ static void cleanup(HeadlessService *self) {
 }
 
 static bool bootstrap(HeadlessService *self, char *outSetupSecret,
-                      size_t secretCapacity, size_t *outSecretLength) {
+                      bytes secretCapacity, bytes *outSecretLength) {
     if (outSecretLength != nullptr)
         *outSecretLength = 0u;
     if (outSetupSecret == nullptr || outSecretLength == nullptr ||
@@ -166,8 +166,8 @@ static bool bootstrap(HeadlessService *self, char *outSetupSecret,
         return false;
     }
 
-    uint8_t secret[HEADLESS_ADMIN_SECRET_BYTES];
-    uint8_t salt[HEADLESS_SALT_BYTES];
+    u8 secret[HEADLESS_ADMIN_SECRET_BYTES];
+    u8 salt[HEADLESS_SALT_BYTES];
     char encoded[40];
     bool truncated = false;
     SecureRandom *random = SecureRandom_0();
@@ -218,7 +218,7 @@ static bool bootstrap(HeadlessService *self, char *outSetupSecret,
         THROW("HeadlessService_start: initial database publication failed");
         return false;
     }
-    size_t encodedLength = strlen(encoded);
+    bytes encodedLength = strlen(encoded);
     memcpy(outSetupSecret, encoded, encodedLength + 1u);
     *outSecretLength = encodedLength;
     memset(encoded, 0, sizeof encoded);
@@ -258,8 +258,8 @@ void HeadlessService_free(HeadlessService *self) {
 
 bool HeadlessService_start(HeadlessService *self, HeadlessSecretStoreFn store,
                            HeadlessSecretLoadFn load, HeadlessSecretRemoveFn remove,
-                            void *context, char *outSetupSecret, size_t secretCapacity,
-                           size_t *outSecretLength) {
+                            void *context, char *outSetupSecret, bytes secretCapacity,
+                           bytes *outSecretLength) {
     if (outSecretLength != nullptr)
         *outSecretLength = 0u;
     if (self == nullptr || (*self).started || (*self).databasePath[0] == '\0' ||
@@ -277,7 +277,7 @@ bool HeadlessService_start(HeadlessService *self, HeadlessSecretStoreFn store,
         THROW("HeadlessService_start: admin schema allocation failed");
         return false;
     }
-    Struct_setSize((*self).adminSchema, (uint32_t) sizeof(HeadlessAdminRecord));
+    Struct_setSize((*self).adminSchema, (u32) sizeof(HeadlessAdminRecord));
     (*self).database = Database();
     if ((*self).database == nullptr || Database_define((*self).database,
             (*self).adminSchema) < 0) {
@@ -295,8 +295,8 @@ bool HeadlessService_start(HeadlessService *self, HeadlessSecretStoreFn store,
             THROW("HeadlessService_start: existing database rejected or lacks admin record");
             return false;
         }
-        uint8_t secret[HEADLESS_ADMIN_SECRET_BYTES];
-        size_t secretLength = 0u;
+        u8 secret[HEADLESS_ADMIN_SECRET_BYTES];
+        bytes secretLength = 0u;
         bool loaded = load(context, HEADLESS_ADMIN_SERVICE, HEADLESS_ADMIN_ACCOUNT,
                            secret, sizeof secret, &secretLength);
         memset(secret, 0, sizeof secret);
@@ -315,14 +315,14 @@ bool HeadlessService_start(HeadlessService *self, HeadlessSecretStoreFn store,
 }
 
 bool HeadlessService_adminLoginAt(HeadlessService *self, const char *username,
-                                  const char *password, uint32_t totpCode,
-                                  uint64_t unixTimeSeconds) {
+                                  const char *password, u32 totpCode,
+                                  u64 unixTimeSeconds) {
     HeadlessAdminRecord *record = adminRecord(self);
     if (record == nullptr || username == nullptr || strcmp(username, HEADLESS_ADMIN_NAME) != 0) {
         THROW("HeadlessService_adminLogin: unknown admin or service not started");
         return false;
     }
-    uint64_t accepted = 0u;
+    u64 accepted = 0u;
     if (!verifyPasswordTotp(self, password, totpCode, unixTimeSeconds, record, &accepted)) {
         THROW("HeadlessService_adminLogin: credentials rejected");
         return false;
@@ -338,27 +338,27 @@ bool HeadlessService_adminLoginAt(HeadlessService *self, const char *username,
 }
 
 bool HeadlessService_adminLogin(HeadlessService *self, const char *username,
-                               const char *password, uint32_t totpCode) {
+                               const char *password, u32 totpCode) {
     DateTime now = {0};
     DateTime_set(&now);
     int64_t millis = DateTime_epochMillis(&now);
     if (millis < 0)
         return false;
     return HeadlessService_adminLoginAt(self, username, password, totpCode,
-                                         (uint64_t) millis / 1000u);
+                                         (u64) millis / 1000u);
 }
 
 bool HeadlessService_changeAdminPasswordAt(HeadlessService *self,
                                            const char *currentPassword,
-                                           const char *newPassword, uint32_t totpCode,
-                                           uint64_t unixTimeSeconds) {
+                                           const char *newPassword, u32 totpCode,
+                                           u64 unixTimeSeconds) {
     HeadlessAdminRecord *record = adminRecord(self);
     if (record == nullptr || !(*self).adminAuthenticated || currentPassword == nullptr ||
         newPassword == nullptr || strlen(newPassword) < 12u) {
         THROW("HeadlessService_changeAdminPassword: invalid state or password policy");
         return false;
     }
-    uint64_t accepted = 0u;
+    u64 accepted = 0u;
     if (!verifyPasswordTotp(self, currentPassword, totpCode, unixTimeSeconds,
                             record, &accepted)) {
         THROW("HeadlessService_changeAdminPassword: credentials rejected");
@@ -388,17 +388,17 @@ bool HeadlessService_changeAdminPasswordAt(HeadlessService *self,
 
 bool HeadlessService_changeAdminPassword(HeadlessService *self,
                                         const char *currentPassword,
-                                        const char *newPassword, uint32_t totpCode) {
+                                        const char *newPassword, u32 totpCode) {
     DateTime now = {0};
     DateTime_set(&now);
     int64_t millis = DateTime_epochMillis(&now);
     if (millis < 0)
         return false;
     return HeadlessService_changeAdminPasswordAt(self, currentPassword, newPassword,
-        totpCode, (uint64_t) millis / 1000u);
+        totpCode, (u64) millis / 1000u);
 }
 
-bool HeadlessService_setPasswordIterations(HeadlessService *self, uint32_t iterations) {
+bool HeadlessService_setPasswordIterations(HeadlessService *self, u32 iterations) {
     if (self == nullptr || (*self).started || iterations < PASSWORD_ITERATIONS_MIN) {
         THROW("HeadlessService_setPasswordIterations: invalid service state or below policy minimum");
         return false;
@@ -407,7 +407,7 @@ bool HeadlessService_setPasswordIterations(HeadlessService *self, uint32_t itera
     return true;
 }
 
-uint32_t HeadlessService_getPasswordIterations(const HeadlessService *self) {
+u32 HeadlessService_getPasswordIterations(const HeadlessService *self) {
     return self == nullptr ? 0u : (*self).passwordIterations;
 }
 
@@ -445,7 +445,7 @@ bool HeadlessService_isRequestAllowed(const HeadlessService *self) {
     return HeadlessService_isAcceptingRequests(self);
 }
 
-bool HeadlessService_toString(const HeadlessService *self, char *dest, size_t cap,
+bool HeadlessService_toString(const HeadlessService *self, char *dest, bytes cap,
                               bool *outTruncated) {
     if (outTruncated != nullptr)
         *outTruncated = false;
@@ -453,8 +453,8 @@ bool HeadlessService_toString(const HeadlessService *self, char *dest, size_t ca
         return false;
     const char *value = self == nullptr ? "nullptr" :
         ((*self).started ? "HeadlessService{started}" : "HeadlessService{closed}");
-    size_t length = strlen(value);
-    size_t copy = length < cap - 1u ? length : cap - 1u;
+    bytes length = strlen(value);
+    bytes copy = length < cap - 1u ? length : cap - 1u;
     memcpy(dest, value, copy);
     dest[copy] = '\0';
     if (outTruncated != nullptr)
@@ -462,7 +462,7 @@ bool HeadlessService_toString(const HeadlessService *self, char *dest, size_t ca
     return copy == length;
 }
 
-bool HeadlessService_toStringStruct(const HeadlessService *self, char *dest, size_t cap,
+bool HeadlessService_toStringStruct(const HeadlessService *self, char *dest, bytes cap,
                                     bool *outTruncated) {
     if (outTruncated != nullptr)
         *outTruncated = false;
@@ -479,7 +479,7 @@ bool HeadlessService_toStringStruct(const HeadlessService *self, char *dest, siz
         (*self).started ? "true" : "false",
         (*self).adminAuthenticated ? "true" : "false",
         (*self).acceptRequests ? "true" : "false", (*self).passwordIterations);
-    bool ok = result >= 0 && (size_t) result < cap;
+    bool ok = result >= 0 && (bytes) result < cap;
     if (!ok && outTruncated != nullptr)
         *outTruncated = true;
     if (!ok)

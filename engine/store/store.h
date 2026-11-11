@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "c23/constructor.h"
+#include "util/constructor.h"
 #include "page/page.h"
 #include "wal/wal.h"
 #include "nio/growable_mapped_file.h"
@@ -34,16 +34,16 @@ typedef struct Store {
     ReGrowableMappedFile *mapping; // resident R2 owner, dropped last
     Wal *wal;                     // descriptor into this SAME file's redo region
     Page *page;                   // Page bound to scratch, never mapping-write alias
-    uint8_t *scratch;             // one full page, owned engine allocation
-    uint8_t *redo;                // STORE_REDO_BYTES + pageSize, owned allocation
-    size_t reserved;              // immutable virtual reservation
-    size_t journalBytes;          // immutable caller-selected redo capacity
-    size_t dataOffset;            // first data-page byte
-    uint32_t pageSize;            // immutable power-of-two geometry
-    uint32_t pageCount;           // high-water page id, not live page count
-    uint32_t freeHead;            // reusable page chain, 0 means empty
-    uint64_t sequence;            // last applied full redo record
-    uint64_t refusals;            // capacity refusals in this open epoch
+    u8 *scratch;             // one full page, owned engine allocation
+    u8 *redo;                // STORE_REDO_BYTES + pageSize, owned allocation
+    bytes reserved;              // immutable virtual reservation
+    bytes journalBytes;          // immutable caller-selected redo capacity
+    bytes dataOffset;            // first data-page byte
+    u32 pageSize;            // immutable power-of-two geometry
+    u32 pageCount;           // high-water page id, not live page count
+    u32 freeHead;            // reusable page chain, 0 means empty
+    u64 sequence;            // last applied full redo record
+    u64 refusals;            // capacity refusals in this open epoch
     StoreCode code;              // last operation result
     bool open;                   // admission complete
     bool blocked;                // uncertain commit requires close/reopen
@@ -53,7 +53,7 @@ typedef struct Store {
 
 Store *Store_0(void);
 Store *Store_1(const char *path); // reopen; geometry comes from verified bootstrap
-Store *Store_4(const char *path, size_t reserved, uint32_t pageSize, size_t journalBytes);
+Store *Store_4(const char *path, bytes reserved, u32 pageSize, bytes journalBytes);
 #define Store(...) CONSTRUCTOR_DISPATCH(Store, __VA_ARGS__)
 #define Store_zero() Store_0()
 void Store_free(Store *self); // no implicit sync or acknowledgement
@@ -62,31 +62,31 @@ void Store_free(Store *self); // no implicit sync or acknowledgement
 // sealed OFF the mapping before the journal is synced. Outputs publish on success.
 // On pre-log rejection data/state are unchanged. After a possible log write,
 // failure blocks admission; reopen resolves it, and a failed call MAY be replayed.
-StoreCode Store_add(Store *self, uint32_t kind, const uint8_t *bytes, uint32_t length,
-                    uint32_t *outPageId);
-StoreCode Store_page_write(Store *self, uint32_t pageId, uint32_t kind,
-                           const uint8_t *bytes, uint32_t length);
-StoreCode Store_page_release(Store *self, uint32_t pageId);
-StoreCode Store_page_read(Store *self, uint32_t pageId, uint8_t *dest, size_t capacity,
-                          uint32_t *outLength, uint32_t *outKind, bool *outTruncated);
+StoreCode Store_add(Store *self, u32 kind, const u8 *bytes, u32 length,
+                    u32 *outPageId);
+StoreCode Store_page_write(Store *self, u32 pageId, u32 kind,
+                           const u8 *bytes, u32 length);
+StoreCode Store_page_release(Store *self, u32 pageId);
+StoreCode Store_page_read(Store *self, u32 pageId, u8 *dest, bytes capacity,
+                          u32 *outLength, u32 *outKind, bool *outTruncated);
 StoreCode Store_sync(Store *self); // data sync only; never retires embedded redo
 
 bool Store_isOpen(const Store *self);
 bool Store_isBlocked(const Store *self);
 StoreCode Store_code(const Store *self);
-uint32_t Store_pageSize(const Store *self);
-uint32_t Store_pageCount(const Store *self);
-uint32_t Store_freeHead(const Store *self);
-size_t Store_reserved(const Store *self);
-size_t Store_journalBytes(const Store *self);
-uint64_t Store_sequence(const Store *self);
-uint64_t Store_exhaustionCount(const Store *self);
+u32 Store_pageSize(const Store *self);
+u32 Store_pageCount(const Store *self);
+u32 Store_freeHead(const Store *self);
+bytes Store_reserved(const Store *self);
+bytes Store_journalBytes(const Store *self);
+u64 Store_sequence(const Store *self);
+u64 Store_exhaustionCount(const Store *self);
 void Store_setCommitObserver(Store *self, StoreCommitObserver observer, void *context);
 StoreCommitObserver Store_getCommitObserver(const Store *self);
 void *Store_getObserverContext(const Store *self);
 const char *Store_codeName(StoreCode code);
-bool Store_toString(const Store *self, char *dest, size_t capacity, bool *outTruncated);
-bool Store_toStringStruct(const Store *self, char *dest, size_t capacity, bool *outTruncated);
+bool Store_toString(const Store *self, char *dest, bytes capacity, bool *outTruncated);
+bool Store_toStringStruct(const Store *self, char *dest, bytes capacity, bool *outTruncated);
 
 // Geometry, owner pointers, counts and sequence are lifecycle-derived, not raw
 // settable: the Conflict Triage Law + Single Class Per File Law (Java Law).

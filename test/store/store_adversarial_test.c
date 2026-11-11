@@ -33,7 +33,7 @@ static void fixture(char path[1024]) {
     assert(n > 0 && n < 1024);
 }
 
-static void writeAt(const char *path, long offset, const void *bytes, size_t length) {
+static void writeAt(const char *path, long offset, const void *bytes, bytes length) {
     FILE *file = fopen(path, "r+b.sh");
     assert(file != nullptr);
     assert(fseek(file, offset, SEEK_SET) == 0);
@@ -42,7 +42,7 @@ static void writeAt(const char *path, long offset, const void *bytes, size_t len
     assert(fclose(file) == 0);
 }
 
-static void readAt(const char *path, long offset, void *bytes, size_t length) {
+static void readAt(const char *path, long offset, void *bytes, bytes length) {
     FILE *file = fopen(path, "rb");
     assert(file != nullptr);
     assert(fseek(file, offset, SEEK_SET) == 0);
@@ -60,8 +60,8 @@ static void committedWalLengthMutation(void) {
     char path[1024];
     fixture(path);
     Store *store = create(path);
-    uint32_t id = 0u;
-    const uint8_t payload[] = "committed record";
+    u32 id = 0u;
+    const u8 payload[] = "committed record";
     assert(Store_add(store, PAGE_KIND_LEAF, payload, sizeof payload, &id) == STORE_OK);
     assert(id == 1u);
     Store_free(store);
@@ -70,7 +70,7 @@ static void committedWalLengthMutation(void) {
     // payload, CRC. Alter a committed record's length while leaving its marker.
     const long lengthOffset = (long) TEST_PAGE + (long) WAL_HEADER_BYTES +
                               (long) WAL_COMMIT_BYTES + 16L;
-    uint32_t recordedLength = 0u;
+    u32 recordedLength = 0u;
     readAt(path, lengthOffset, &recordedLength, sizeof recordedLength);
     assert(recordedLength == STORE_REDO_BYTES + TEST_PAGE);
     --recordedLength;
@@ -86,25 +86,25 @@ static void livePageDamageAndRecovery(void) {
     char path[1024];
     fixture(path);
     Store *store = create(path);
-    const uint8_t original[] = "redo repairs the damaged page";
-    uint32_t id = 0u;
+    const u8 original[] = "redo repairs the damaged page";
+    u32 id = 0u;
     assert(Store_add(store, PAGE_KIND_LEAF, original, sizeof original, &id) == STORE_OK);
 
     // Deliberately simulate backing-store damage through a test-owned file handle.
     // No concurrent actor is present; this is an adversarial corruption probe outside
     // the Store's stable-file precondition, not a hostile-writer safety claim.
     long dataOffset = (long) TEST_PAGE + (long) TEST_JOURNAL + (long) PAGE_HEADER_BYTES;
-    uint8_t damaged = (uint8_t) (original[0] ^ 0x5Au);
+    u8 damaged = (u8) (original[0] ^ 0x5Au);
     writeAt(path, dataOffset, &damaged, sizeof damaged);
 
-    uint8_t destination[64];
+    u8 destination[64];
     memset(destination, 0xA5, sizeof destination);
-    uint32_t length = 0x12345678u;
-    uint32_t kind = 0x87654321u;
+    u32 length = 0x12345678u;
+    u32 kind = 0x87654321u;
     bool truncated = true;
     assert(Store_page_read(store, id, destination, sizeof destination, &length, &kind,
                            &truncated) == STORE_CORRUPT);
-    for (size_t i = 0u; i < sizeof destination; ++i)
+    for (bytes i = 0u; i < sizeof destination; ++i)
         assert(destination[i] == 0xA5u);
     assert(length == 0x12345678u && kind == 0x87654321u && truncated);
     Store_free(store);
@@ -130,14 +130,14 @@ static void rejectedReadPreservesOutputs(void) {
     char path[1024];
     fixture(path);
     Store *store = create(path);
-    const uint8_t payload[] = "out-parameters";
-    uint32_t id = 0u;
+    const u8 payload[] = "out-parameters";
+    u32 id = 0u;
     assert(Store_add(store, PAGE_KIND_LEAF, payload, sizeof payload, &id) == STORE_OK);
 
-    uint8_t destination[32];
+    u8 destination[32];
     memset(destination, 0xC3, sizeof destination);
-    uint32_t length = 0x11223344u;
-    uint32_t kind = 0x55667788u;
+    u32 length = 0x11223344u;
+    u32 kind = 0x55667788u;
     bool truncated = true;
 
     assert(Store_page_read(store, id, nullptr, sizeof destination, &length, &kind,
@@ -153,15 +153,15 @@ static void rejectedReadPreservesOutputs(void) {
                            nullptr) == STORE_INVALID);
     assert(length == 0x11223344u && kind == 0x55667788u);
 
-    const uint32_t invalidIds[] = {0u, 2u};
-    for (size_t index = 0u; index < sizeof invalidIds / sizeof invalidIds[0]; ++index) {
+    const u32 invalidIds[] = {0u, 2u};
+    for (bytes index = 0u; index < sizeof invalidIds / sizeof invalidIds[0]; ++index) {
         memset(destination, 0xC3, sizeof destination);
         length = 0x11223344u;
         kind = 0x55667788u;
         truncated = true;
         assert(Store_page_read(store, invalidIds[index], destination, sizeof destination,
                                &length, &kind, &truncated) == STORE_INVALID);
-        for (size_t i = 0u; i < sizeof destination; ++i)
+        for (bytes i = 0u; i < sizeof destination; ++i)
             assert(destination[i] == 0xC3u);
         assert(length == 0x11223344u && kind == 0x55667788u && truncated);
     }
@@ -178,7 +178,7 @@ static void malformedBootstrapAdmission(void) {
 
     // Corrupt an unused bootstrap payload byte without resealing the page. The
     // bootstrap checksum covers only its header and used bytes, including this byte.
-    uint8_t nonzero = 1u;
+    u8 nonzero = 1u;
     writeAt(path, (long) PAGE_HEADER_BYTES + 40L, &nonzero, sizeof nonzero);
     assert(Store_1(path) == nullptr);
     assert(unlink(path) == 0);
@@ -189,13 +189,13 @@ static void malformedBootstrapAdmission(void) {
 
     // Rebuild a page with a valid page seal but an unsupported bootstrap version:
     // this distinguishes semantic bootstrap validation from CRC-only validation.
-    uint8_t pageBytes[TEST_PAGE];
+    u8 pageBytes[TEST_PAGE];
     readAt(path, 0L, pageBytes, sizeof pageBytes);
     Page *page = Page_2(pageBytes, TEST_PAGE);
     assert(page != nullptr && Page_load(page) == PAGE_OK);
-    uint8_t bootstrap[STORE_BOOTSTRAP_BYTES];
+    u8 bootstrap[STORE_BOOTSTRAP_BYTES];
     memcpy(bootstrap, Page_payloadOf(page), sizeof bootstrap);
-    uint32_t unsupportedVersion = STORE_FORMAT_VERSION + 1u;
+    u32 unsupportedVersion = STORE_FORMAT_VERSION + 1u;
     memcpy(bootstrap + 8u, &unsupportedVersion, sizeof unsupportedVersion);
     assert(Page_format(page, 0u, PAGE_KIND_CATALOG) == PAGE_OK);
     assert(Page_append(page, bootstrap, sizeof bootstrap) == PAGE_OK);
@@ -210,7 +210,7 @@ int main(void) {
     const char *tmp = getenv("TMPDIR");
     int n = snprintf(directory, sizeof directory, "%s/store-adversarial-XXXXXX",
                      tmp != nullptr ? tmp : "/tmp");
-    assert(n > 0 && (size_t) n < sizeof directory && mkdtemp(directory) != nullptr);
+    assert(n > 0 && (bytes) n < sizeof directory && mkdtemp(directory) != nullptr);
     committedWalLengthMutation();
     livePageDamageAndRecovery();
     rejectedReadPreservesOutputs();

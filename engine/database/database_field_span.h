@@ -19,9 +19,9 @@
 // null or malformed argument, an ambiguous folded name, or a span that would
 // leave the row — a span the caller could not safely read is never returned.
 typedef struct DatabaseFieldSpan {
-    int32_t code;   // DATABASE_OK, or the rejection code
-    uint32_t offset; // in-row byte offset of the field's span
-    uint32_t size;   // Bytes in the field's span
+    i32 code;   // DATABASE_OK, or the rejection code
+    u32 offset; // in-row byte offset of the field's span
+    u32 size;   // Bytes in the field's span
 } DatabaseFieldSpan;
 
 #endif

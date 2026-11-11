@@ -29,19 +29,19 @@ static unsigned fixtureId;
 // source contains no fault switch; these wrappers delegate to the actual R2/Wal
 // functions except for the one explicitly armed next failure.
 static unsigned fault;
-uint32_t StoreTest_mapWrite(ReGrowableMappedFile *owner, size_t offset, const uint8_t *src, size_t length) {
+u32 StoreTest_mapWrite(ReGrowableMappedFile *owner, bytes offset, const u8 *src, bytes length) {
     if (fault == 1u) { fault = 0u; return 2u; }
     return re_gmap_write(owner, offset, src, length);
 }
-uint32_t StoreTest_mapSync(ReGrowableMappedFile *owner) {
+u32 StoreTest_mapSync(ReGrowableMappedFile *owner) {
     if (fault == 2u) { fault = 0u; return 2u; }
     return re_gmap_sync(owner);
 }
-uint32_t StoreTest_mapGrow(ReGrowableMappedFile *owner, size_t length) {
+u32 StoreTest_mapGrow(ReGrowableMappedFile *owner, bytes length) {
     if (fault == 3u) { fault = 0u; return 2u; }
     return re_gmap_grow_to(owner, length);
 }
-WalCode StoreTest_walAppend(Wal *owner, uint32_t op, const uint8_t *src, uint32_t length, uint64_t *sequence) {
+WalCode StoreTest_walAppend(Wal *owner, u32 op, const u8 *src, u32 length, u64 *sequence) {
     if (fault == 4u) { fault = 0u; return WAL_IO; }
     return Wal_append(owner, op, src, length, sequence);
 }
@@ -56,10 +56,10 @@ static void fixture(char path[1024]) {
     assert(n > 0 && n < 1024);
 }
 
-static void readEquals(Store *store, uint32_t id, const uint8_t *expected, uint32_t length) {
-    uint8_t bytes[TEST_PAGE];
+static void readEquals(Store *store, u32 id, const u8 *expected, u32 length) {
+    u8 bytes[TEST_PAGE];
     memset(bytes, 0xCC, sizeof bytes);
-    uint32_t actual = UINT32_MAX, kind = UINT32_MAX;
+    u32 actual = UINT32_MAX, kind = UINT32_MAX;
     bool cut = true;
     assert(Store_page_read(store, id, bytes, sizeof bytes, &actual, &kind, &cut) == STORE_OK);
     assert(!cut && actual == length && kind == PAGE_KIND_LEAF);
@@ -86,24 +86,24 @@ static void lifecycle(void) {
     struct stat st;
     assert(stat(path, &st) == 0 && st.st_size == TEST_RESERVATION);
     assert(Store_4(path, TEST_RESERVATION, TEST_PAGE, TEST_JOURNAL) == nullptr);
-    uint8_t payload[TEST_PAGE - PAGE_HEADER_BYTES];
-    for (size_t i = 0u; i < sizeof payload; ++i)
-        payload[i] = (uint8_t) (i * 13u);
-    uint32_t ids[TEST_LIVE_PAGES];
-    for (uint32_t i = 0u; i < TEST_LIVE_PAGES; ++i) {
-        payload[0] = (uint8_t) i;
+    u8 payload[TEST_PAGE - PAGE_HEADER_BYTES];
+    for (bytes i = 0u; i < sizeof payload; ++i)
+        payload[i] = (u8) (i * 13u);
+    u32 ids[TEST_LIVE_PAGES];
+    for (u32 i = 0u; i < TEST_LIVE_PAGES; ++i) {
+        payload[0] = (u8) i;
         assert(Store_add(store, PAGE_KIND_LEAF, payload, sizeof payload, &ids[i]) == STORE_OK);
         assert(ids[i] == i + 1u);
     }
     assert(Store_pageCount(store) == TEST_LIVE_PAGES);
     assert(Store_sequence(store) == TEST_LIVE_PAGES);
-    for (uint32_t i = 0u; i < TEST_LIVE_PAGES; ++i) {
-        payload[0] = (uint8_t) i;
+    for (u32 i = 0u; i < TEST_LIVE_PAGES; ++i) {
+        payload[0] = (u8) i;
         readEquals(store, ids[i], payload, sizeof payload);
     }
     // Rejection does not change the output id, count, sequence or survivor bytes.
-    uint32_t out = UINT32_MAX;
-    uint64_t sequence = Store_sequence(store);
+    u32 out = UINT32_MAX;
+    u64 sequence = Store_sequence(store);
     assert(Store_add(store, PAGE_KIND_LEAF, payload, sizeof payload + 1u, &out) == STORE_INVALID);
     assert(out == UINT32_MAX && Store_sequence(store) == sequence);
     assert(Store_add(store, PAGE_KIND_FREE, payload, 1u, &out) == STORE_INVALID);
@@ -111,8 +111,8 @@ static void lifecycle(void) {
     assert(Store_add(store, PAGE_KIND_LEAF, payload, 1u, nullptr) == STORE_INVALID);
     assert(Store_page_write(store, 0u, PAGE_KIND_LEAF, payload, 1u) == STORE_INVALID);
     assert(Store_page_release(store, TEST_LIVE_PAGES + 1u) == STORE_INVALID);
-    uint8_t small[4] = {0x55, 0x55, 0x55, 0x55};
-    uint32_t length = 123u, kind = 124u;
+    u8 small[4] = {0x55, 0x55, 0x55, 0x55};
+    u32 length = 123u, kind = 124u;
     bool cut = false;
     assert(Store_page_read(store, ids[0], small, sizeof small, &length, &kind, &cut) == STORE_TRUNCATED);
     assert(cut && length == 123u && kind == 124u && small[0] == 0x55);
@@ -122,9 +122,9 @@ static void lifecycle(void) {
     assert(Store_page_release(store, ids[1]) == STORE_INVALID);
     assert(Store_page_write(store, ids[1], PAGE_KIND_LEAF, payload, 1u) == STORE_INVALID);
     assert(Store_freeHead(store) == ids[1]);
-    assert(Store_add(store, PAGE_KIND_LEAF, (const uint8_t*) "reused", 6u, &out) == STORE_OK);
+    assert(Store_add(store, PAGE_KIND_LEAF, (const u8*) "reused", 6u, &out) == STORE_OK);
     assert(out == ids[1] && Store_pageCount(store) == TEST_LIVE_PAGES && Store_freeHead(store) == 0u);
-    assert(Store_page_write(store, ids[0], PAGE_KIND_LEAF, (const uint8_t*) "changed", 7u) == STORE_OK);
+    assert(Store_page_write(store, ids[0], PAGE_KIND_LEAF, (const u8*) "changed", 7u) == STORE_OK);
     assert(Store_sync(store) == STORE_OK);
     char text[768];
     assert(Store_toString(store, text, sizeof text, &cut) && !cut);
@@ -138,10 +138,10 @@ static void lifecycle(void) {
     store = Store(path);
     assert(store != nullptr && Store_sequence(store) == sequence);
     assert(Store_pageCount(store) == TEST_LIVE_PAGES);
-    readEquals(store, ids[0], (const uint8_t*) "changed", 7u);
-    readEquals(store, ids[1], (const uint8_t*) "reused", 6u);
-    for (uint32_t i = 2u; i < TEST_LIVE_PAGES; ++i) {
-        payload[0] = (uint8_t) i;
+    readEquals(store, ids[0], (const u8*) "changed", 7u);
+    readEquals(store, ids[1], (const u8*) "reused", 6u);
+    for (u32 i = 2u; i < TEST_LIVE_PAGES; ++i) {
+        payload[0] = (u8) i;
         readEquals(store, ids[i], payload, sizeof payload);
     }
     // Persist the free chain through reopen, then consume it in LIFO order.
@@ -152,7 +152,7 @@ static void lifecycle(void) {
     assert(store != nullptr && Store_freeHead(store) == ids[3]);
     assert(Store_add(store, PAGE_KIND_LEAF, nullptr, 0u, &out) == STORE_OK && out == ids[3]);
     assert(Store_add(store, PAGE_KIND_LEAF, nullptr, 0u, &out) == STORE_OK && out == ids[2]);
-    readEquals(store, out, (const uint8_t*) "", 0u);
+    readEquals(store, out, (const u8*) "", 0u);
     assert(Store_freeHead(store) == 0u);
     Store_free(store);
     assert(unlink(path) == 0);
@@ -162,40 +162,40 @@ static void boundedResources(void) {
     char path[1024];
     fixture(path);
     // Exactly two data pages; journal ample for release/reuse/refill history.
-    size_t journal = 8192u;
+    bytes journal = 8192u;
     Store *store = Store_4(path, journal + TEST_PAGE * 3u, TEST_PAGE, journal);
     assert(store != nullptr);
-    uint32_t a = 0u, b = 0u, out = UINT32_MAX;
-    assert(Store_add(store, PAGE_KIND_LEAF, (const uint8_t*) "A", 1u, &a) == STORE_OK);
-    assert(Store_add(store, PAGE_KIND_LEAF, (const uint8_t*) "B", 1u, &b) == STORE_OK);
+    u32 a = 0u, b = 0u, out = UINT32_MAX;
+    assert(Store_add(store, PAGE_KIND_LEAF, (const u8*) "A", 1u, &a) == STORE_OK);
+    assert(Store_add(store, PAGE_KIND_LEAF, (const u8*) "B", 1u, &b) == STORE_OK);
     assert(Store_add(store, PAGE_KIND_LEAF, nullptr, 0u, &out) == STORE_FULL);
     assert(Store_add(store, PAGE_KIND_LEAF, nullptr, 0u, &out) == STORE_FULL);
     assert(Store_exhaustionCount(store) == 2u && out == UINT32_MAX && !Store_isBlocked(store));
-    readEquals(store, a, (const uint8_t*) "A", 1u);
-    readEquals(store, b, (const uint8_t*) "B", 1u);
+    readEquals(store, a, (const u8*) "A", 1u);
+    readEquals(store, b, (const u8*) "B", 1u);
     assert(Store_page_release(store, a) == STORE_OK);
-    assert(Store_add(store, PAGE_KIND_LEAF, (const uint8_t*) "C", 1u, &out) == STORE_OK && out == a);
+    assert(Store_add(store, PAGE_KIND_LEAF, (const u8*) "C", 1u, &out) == STORE_OK && out == a);
     assert(Store_add(store, PAGE_KIND_LEAF, nullptr, 0u, &out) == STORE_FULL);
     assert(Store_exhaustionCount(store) == 3u);
     Store_free(store);
     store = Store_1(path);
     assert(store != nullptr && Store_exhaustionCount(store) == 0u);
-    readEquals(store, a, (const uint8_t*) "C", 1u);
+    readEquals(store, a, (const u8*) "C", 1u);
     Store_free(store);
     assert(unlink(path) == 0);
     // Small explicit redo region: one full-page redo fits, the next must reject.
     fixture(path);
     store = Store_4(path, 16384u, TEST_PAGE, TEST_PAGE * 2u);
     assert(store != nullptr);
-    assert(Store_add(store, PAGE_KIND_LEAF, (const uint8_t*) "retained", 8u, &a) == STORE_OK);
-    assert(Store_page_write(store, a, PAGE_KIND_LEAF, (const uint8_t*) "NO", 2u) == STORE_FULL);
-    assert(Store_page_write(store, a, PAGE_KIND_LEAF, (const uint8_t*) "NO", 2u) == STORE_FULL);
+    assert(Store_add(store, PAGE_KIND_LEAF, (const u8*) "retained", 8u, &a) == STORE_OK);
+    assert(Store_page_write(store, a, PAGE_KIND_LEAF, (const u8*) "NO", 2u) == STORE_FULL);
+    assert(Store_page_write(store, a, PAGE_KIND_LEAF, (const u8*) "NO", 2u) == STORE_FULL);
     assert(Store_exhaustionCount(store) == 2u && Store_sequence(store) == 1u);
-    readEquals(store, a, (const uint8_t*) "retained", 8u);
+    readEquals(store, a, (const u8*) "retained", 8u);
     Store_free(store);
     store = Store_1(path);
     assert(store != nullptr);
-    readEquals(store, a, (const uint8_t*) "retained", 8u);
+    readEquals(store, a, (const u8*) "retained", 8u);
     Store_free(store);
     assert(unlink(path) == 0);
 }
@@ -205,8 +205,8 @@ static void interruptedCommit(unsigned phase) {
     fixture(path);
     Store *store = Store_4(path, TEST_RESERVATION, TEST_PAGE, TEST_JOURNAL);
     assert(store != nullptr);
-    uint32_t id = 0u;
-    assert(Store_add(store, PAGE_KIND_LEAF, (const uint8_t*) "old", 3u, &id) == STORE_OK);
+    u32 id = 0u;
+    assert(Store_add(store, PAGE_KIND_LEAF, (const u8*) "old", 3u, &id) == STORE_OK);
     Store_free(store);
     pid_t child = fork();
     assert(child >= 0);
@@ -215,7 +215,7 @@ static void interruptedCommit(unsigned phase) {
         assert(writer != nullptr);
         Store_setCommitObserver(writer, crashObserver, &phase);
         assert(Store_getCommitObserver(writer) == crashObserver && Store_getObserverContext(writer) == &phase);
-        (void) Store_page_write(writer, id, PAGE_KIND_LEAF, (const uint8_t*) "durable-redo", 12u);
+        (void) Store_page_write(writer, id, PAGE_KIND_LEAF, (const u8*) "durable-redo", 12u);
         _exit(9); // must not return from the selected actual commit boundary
     }
     int status = 0;
@@ -225,16 +225,16 @@ static void interruptedCommit(unsigned phase) {
     // recovery must repair a torn page, not merely adopt a lucky page-cache write.
     FILE *raw = fopen(path, "r+b.sh");
     assert(raw != nullptr && fseek(raw, TEST_PAGE + TEST_JOURNAL, SEEK_SET) == 0);
-    uint8_t torn[TEST_PAGE] = {0};
+    u8 torn[TEST_PAGE] = {0};
     assert(fwrite(torn, 1u, sizeof torn, raw) == sizeof torn && fclose(raw) == 0);
     store = Store_1(path);
     assert(store != nullptr && Store_sequence(store) == 2u);
-    readEquals(store, id, (const uint8_t*) "durable-redo", 12u);
-    assert(Store_page_write(store, id, PAGE_KIND_LEAF, (const uint8_t*) "retry", 5u) == STORE_OK);
+    readEquals(store, id, (const u8*) "durable-redo", 12u);
+    assert(Store_page_write(store, id, PAGE_KIND_LEAF, (const u8*) "retry", 5u) == STORE_OK);
     Store_free(store);
     store = Store_1(path);
     assert(store != nullptr && Store_sequence(store) == 3u);
-    readEquals(store, id, (const uint8_t*) "retry", 5u);
+    readEquals(store, id, (const u8*) "retry", 5u);
     Store_free(store);
     assert(unlink(path) == 0);
 }
@@ -250,7 +250,7 @@ static void invalidAdmission(void) {
     assert(access(path, F_OK) != 0);
     Store *zero = Store_zero();
     assert(zero != nullptr && !Store_isOpen(zero));
-    uint32_t id = 99u;
+    u32 id = 99u;
     assert(Store_add(zero, PAGE_KIND_LEAF, nullptr, 0u, &id) == STORE_CLOSED && id == 99u);
     assert(Store_sync(zero) == STORE_CLOSED);
     Store_free(zero);
@@ -288,23 +288,23 @@ static void forgedBaseline(void) {
     fixture(path);
     Store *store = Store_4(path, TEST_RESERVATION, TEST_PAGE, TEST_JOURNAL);
     assert(store != nullptr);
-    uint32_t id = 0u;
-    assert(Store_add(store, PAGE_KIND_LEAF, (const uint8_t*) "baseline", 8u, &id) == STORE_OK);
+    u32 id = 0u;
+    assert(Store_add(store, PAGE_KIND_LEAF, (const u8*) "baseline", 8u, &id) == STORE_OK);
     Store_free(store);
     // A CRC-valid region header and record are NOT a supported checkpoint base.
     // Store always replays from immutable bootstrap state, so base must be zero.
     FILE *raw = fopen(path, "r+b.sh");
     assert(raw != nullptr && fseek(raw, TEST_PAGE, SEEK_SET) == 0);
-    uint8_t header[WAL_HEADER_BYTES];
+    u8 header[WAL_HEADER_BYTES];
     assert(fread(header, 1u, sizeof header, raw) == sizeof header);
-    uint64_t base = 100u;
+    u64 base = 100u;
     memcpy(header + 8u, &base, sizeof base);
-    uint32_t crc = Crc32_of(header, 20u);
+    u32 crc = Crc32_of(header, 20u);
     memcpy(header + 20u, &crc, sizeof crc);
     assert(fseek(raw, TEST_PAGE, SEEK_SET) == 0 && fwrite(header, 1u, sizeof header, raw) == sizeof header);
-    uint8_t record[8u + WAL_RECORD_FIXED + STORE_REDO_BYTES + TEST_PAGE + 4u];
+    u8 record[8u + WAL_RECORD_FIXED + STORE_REDO_BYTES + TEST_PAGE + 4u];
     assert(fread(record, 1u, sizeof record, raw) == sizeof record);
-    uint64_t sequence = base + 1u;
+    u64 sequence = base + 1u;
     memcpy(record + 16u, &sequence, sizeof sequence);
     crc = Crc32_of(record + 8u, sizeof record - 12u);
     memcpy(record + sizeof record - 4u, &crc, sizeof crc);
@@ -321,24 +321,24 @@ static void uncertainIO(void) {
         fixture(path);
         Store *store = Store_4(path, TEST_RESERVATION, TEST_PAGE, TEST_JOURNAL);
         assert(store != nullptr);
-        uint32_t id = 0u, out = UINT32_MAX;
-        assert(Store_add(store, PAGE_KIND_LEAF, (const uint8_t*) "survivor", 8u, &id) == STORE_OK);
+        u32 id = 0u, out = UINT32_MAX;
+        assert(Store_add(store, PAGE_KIND_LEAF, (const u8*) "survivor", 8u, &id) == STORE_OK);
         fault = stage;
-        assert(Store_add(store, PAGE_KIND_LEAF, (const uint8_t*) "uncertain", 9u, &out) == STORE_RECOVERY_REQUIRED);
+        assert(Store_add(store, PAGE_KIND_LEAF, (const u8*) "uncertain", 9u, &out) == STORE_RECOVERY_REQUIRED);
         assert(fault == 0u && out == UINT32_MAX && Store_isBlocked(store));
         assert(Store_add(store, PAGE_KIND_LEAF, nullptr, 0u, &out) == STORE_RECOVERY_REQUIRED);
         assert(Store_page_write(store, id, PAGE_KIND_LEAF, nullptr, 0u) == STORE_RECOVERY_REQUIRED);
         Store_free(store);
         store = Store_1(path);
         assert(store != nullptr && !Store_isBlocked(store));
-        readEquals(store, id, (const uint8_t*) "survivor", 8u);
+        readEquals(store, id, (const u8*) "survivor", 8u);
         if (stage == 4u)
             assert(Store_pageCount(store) == 1u && Store_sequence(store) == 1u);
         else {
             assert(Store_pageCount(store) == 2u && Store_sequence(store) == 2u);
-            readEquals(store, 2u, (const uint8_t*) "uncertain", 9u);
+            readEquals(store, 2u, (const u8*) "uncertain", 9u);
         }
-        assert(Store_add(store, PAGE_KIND_LEAF, (const uint8_t*) "retry", 5u, &out) == STORE_OK);
+        assert(Store_add(store, PAGE_KIND_LEAF, (const u8*) "retry", 5u, &out) == STORE_OK);
         Store_free(store);
         assert(unlink(path) == 0);
     }
@@ -350,7 +350,7 @@ int main(int argc, char **argv) {
     assert(argc == 1 || leakSafe);
     const char *tmp = getenv("TMPDIR");
     int n = snprintf(directory, sizeof directory, "%s/store-owner-XXXXXX", tmp != nullptr ? tmp : "/tmp");
-    assert(n > 0 && (size_t) n < sizeof directory && mkdtemp(directory) != nullptr);
+    assert(n > 0 && (bytes) n < sizeof directory && mkdtemp(directory) != nullptr);
     invalidAdmission();
     lifecycle();
     boundedResources();

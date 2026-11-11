@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "c23/constructor.h"
+#include "util/constructor.h"
 #include "database/database_catalog_entry.h"
 #include "database/database_field_span.h"
 #include "database/database_result.h"
@@ -53,45 +53,45 @@ typedef struct Store Store;
 
 typedef struct Database {
     ChunkedList *entities;              // DbEntity rows (layout private to database.c)
-    uint32_t chunkBytes;                // leaf byte budget for per-entity row lists
-    int32_t lastCode;                   // last DATABASE_* code
+    u32 chunkBytes;                // leaf byte budget for per-entity row lists
+    i32 lastCode;                   // last DATABASE_* code
     char lastError[DB_ERROR_MESSAGE_MAX];
 } Database;
 
 // --- Constructors ---
 // _0() uses the default leaf budget; _1(chunkBytes) overrides it. Arena-allocated.
 Database *Database_0(void);
-Database *Database_1(uint32_t chunkBytes);
+Database *Database_1(u32 chunkBytes);
 #define Database(...) CONSTRUCTOR_DISPATCH(Database, __VA_ARGS__)
 // Release an arena-allocated Database and every per-entity row list. Rows are
 // borrowed (never freed here). Never call on an inline instance.
 void Database_free(Database *self);
 
-uint64_t Database_kind(const Database *self);
-bool Database_check(const Database *self, uint64_t typeId);
+u64 Database_kind(const Database *self);
+bool Database_check(const Database *self, u64 typeId);
 
 // --- Core functions ---
 // Register a Struct as an entity. Returns its index, or -1 on a null/illegal
 // schema or a duplicate name. The schema is borrowed for the Database's life.
-int32_t Database_define(Database *self, Struct *schema);
+i32 Database_define(Database *self, Struct *schema);
 // Register index for a folded name, or -1 when absent/invalid (null-safe).
-int32_t Database_entityIndex(const Database *self, const char *entity);
+i32 Database_entityIndex(const Database *self, const char *entity);
 // Live entity count.
-uint32_t Database_entityCount(const Database *self);
+u32 Database_entityCount(const Database *self);
 // The borrowed schema for an entity, or null (null-safe).
 Struct *Database_schema(const Database *self, const char *entity);
 
 // Bind a caller-owned live row to an entity. Returns the row index, or -1.
-int32_t Database_insert(Database *self, const char *entity, void *row);
+i32 Database_insert(Database *self, const char *entity, void *row);
 // Copy one exact schema-stride row into Database ownership. An entity is either
 // entirely borrowed (Database_insert) or owned (loaded / insertOwned); rows do
 // not mix ownership modes. Returns the row index, or -1 without mutation.
-int32_t Database_insertOwned(Database *self, const char *entity, const void *rowBytes,
-                             size_t rowBytesLength);
+i32 Database_insertOwned(Database *self, const char *entity, const void *rowBytes,
+                             bytes rowBytesLength);
 // The row pointer at an index, or null (null-safe).
-void *Database_row(const Database *self, const char *entity, uint32_t index);
+void *Database_row(const Database *self, const char *entity, u32 index);
 // Live rows bound to an entity (0 when absent).
-uint32_t Database_count(const Database *self, const char *entity);
+u32 Database_count(const Database *self, const char *entity);
 // A fresh dest-last cursor over an entity's rows, or null when absent.
 DatabaseResult *Database_select(Database *self, const char *entity);
 // Cold raw-byte equality predicate over one reflected Field. The Field must
@@ -100,16 +100,16 @@ DatabaseResult *Database_select(Database *self, const char *entity);
 // Database. Equal values use exact byte equality, not numeric conversion.
 DatabaseResult *Database_queryEqual(Database *self, const char *entity,
                                     const char *field, const void *value,
-                                    size_t valueLength);
+                                    bytes valueLength);
 // Inclusive signed int32 range query: the field bytes are interpreted as a
-// native int32_t regardless of reflected typeId. The field must have exactly
-// sizeof(int32_t) bytes within Struct.size. Result borrows matching rows. Uses
+// native i32 regardless of reflected typeId. The field must have exactly
+// sizeof(i32) bytes within Struct.size. Result borrows matching rows. Uses
 // the entity's declared int32 index when one covers this field (see
 // Database_indexBuild) and otherwise scans the row list; both return the same
 // matches, though the indexed path yields them in key order.
 DatabaseResult *Database_queryInt32Range(Database *self, const char *entity,
-                                         const char *field, int32_t minimum,
-                                         int32_t maximum);
+                                         const char *field, i32 minimum,
+                                         i32 maximum);
 
 // --- Named field resolution ---
 // Where the NAMED field's Bytes live inside this entity's rows, so a caller
@@ -124,14 +124,14 @@ DatabaseFieldSpan Database_fieldSpan(const Database *self, const char *entity,
 
 // --- In-memory integer index ---
 // Build the int32 index for one field of an entity: the Field must carry
-// REFLECT_FIELD_INDEXED and span exactly sizeof(int32_t) within Struct.size, so
+// REFLECT_FIELD_INDEXED and span exactly sizeof(i32) within Struct.size, so
 // the schema's flag is the opt-in declaration. Cold path. Rows are append-only,
 // so inserts only mark the records stale and the next query rebuilds them; while
 // an index exists the indexed field of a bound row must not be mutated in place,
 // which the Database does not detect. Records are in-memory only: nothing is
 // persisted, and a load drops them while the definition survives for the next
 // query. Returns a DATABASE_* code.
-int32_t Database_indexBuild(Database *self, const char *entity, const char *field);
+i32 Database_indexBuild(Database *self, const char *entity, const char *field);
 // True when the entity declares an index for that field (records may be stale).
 bool Database_indexed(const Database *self, const char *entity, const char *field);
 
@@ -142,28 +142,28 @@ bool Database_indexed(const Database *self, const char *entity, const char *fiel
 // A trailing CRC32 covers the payload; a bad header/CRC rejects before mutating.
 // Returns a DATABASE_* code. Flat native-endian row Bytes; big-endian is out of
 // scope for this slice.
-int32_t Database_save(Database *self, const char *path);
-int32_t Database_load(Database *self, const char *path);
+i32 Database_save(Database *self, const char *path);
+i32 Database_load(Database *self, const char *path);
 // Page-store persistence is a separate v1 path; it does not replace the legacy
 // flat snapshot API. Caller owns Store and supplies the same reflected schemas
 // before load. Each complete database image is published by one root-page write;
 // a failed pre-publication save leaves the prior image readable. Rows and schema
 // metadata are copied into page-owned bytes; live Database rows are unchanged.
-int32_t Database_saveStore(Database *self, Store *store);
-int32_t Database_loadStore(Database *self, Store *store);
+i32 Database_saveStore(Database *self, Store *store);
+i32 Database_loadStore(Database *self, Store *store);
 // Read one committed catalog record by zero-based position. The returned value
 // owns no storage and remains valid independently of Store lifetime. Invalid or
 // corrupt catalogs return a non-OK code; out-of-range indices report ABSENT.
-DatabaseCatalogEntry Database_storeCatalogEntry(Store *store, uint32_t index);
+DatabaseCatalogEntry Database_storeCatalogEntry(Store *store, u32 index);
 
 // --- Diagnostics ---
-int32_t Database_errorCode(const Database *self);
+i32 Database_errorCode(const Database *self);
 // Bounded copy of the last error message (dest-last); returns length or -1.
-int Database_lastError(const Database *self, char *out, size_t outCap);
+int Database_lastError(const Database *self, char *out, bytes outCap);
 // Static text for a DATABASE_* code (never null).
-const char *Database_errorText(int32_t code);
+const char *Database_errorText(i32 code);
 
-void Database_toString(const Database *self, char *dest, size_t cap, bool *outTruncated);
-void Database_toStringStruct(const Database *self, char *dest, size_t cap, bool *outTruncated);
+void Database_toString(const Database *self, char *dest, bytes cap, bool *outTruncated);
+void Database_toStringStruct(const Database *self, char *dest, bytes cap, bool *outTruncated);
 
 #endif

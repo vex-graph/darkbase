@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "c23/constructor.h"
+#include "util/constructor.h"
 
 // oop/modifier.h — the frozen field-modifier keyword set.
 //
@@ -122,12 +122,12 @@ typedef enum ModifierWarning {
 
 // STRUCT FIELDS (mirrored by the ;;OVERVIEW in oop/modifier.c, in this order)
 typedef struct Modifier {
-    uint32_t access;      // ModifierAccess
-    uint32_t protection;  // ModifierProtection
-    uint32_t nullability; // ModifierNullability
+    u32 access;      // ModifierAccess
+    u32 protection;  // ModifierProtection
+    u32 nullability; // ModifierNullability
     bool transient;       // not persisted: in-memory only
     bool shared;          // "static": shared across rows
-    int32_t lastCode;     // last ModifierCode
+    i32 lastCode;     // last ModifierCode
 } Modifier;
 
 #define MODIFIER_TOKEN_MAX   32u // one token, including its NUL
@@ -258,7 +258,7 @@ ModifierCode Modifier_validate(Modifier self);
 // True when Modifier_validate is MODIFIER_OK.
 bool Modifier_isAdmissible(Modifier self);
 // Policy advisories (a bitmask of ModifierWarning); never a rejection.
-uint32_t Modifier_warnings(Modifier self);
+u32 Modifier_warnings(Modifier self);
 
 // --- Accessors (a value record; read-only) ---------------------------------
 ModifierAccess Modifier_getAccess(Modifier self);
@@ -282,7 +282,7 @@ const char *Modifier_accessName(ModifierAccess access);
 const char *Modifier_protectionName(ModifierProtection protection);
 const char *Modifier_nullabilityName(ModifierNullability nullability);
 const char *Modifier_codeName(ModifierCode code);
-const char *Modifier_warningName(uint32_t warning);
+const char *Modifier_warningName(u32 warning);
 
 // --- Terminal path ---------------------------------------------------------
 // Parse a whitespace-separated modifier list, e.g.
@@ -296,8 +296,8 @@ Modifier Modifier_applyToken(Modifier self, const char *token);
 
 // --- Projections (the toString Law; dest-last per this repo's convention) ---
 // Canonical token, e.g. "public:client-sealed:nonnull:transient:static".
-bool Modifier_toString(Modifier self, char *dest, size_t capacity, bool *outTruncated);
+bool Modifier_toString(Modifier self, char *dest, bytes capacity, bool *outTruncated);
 // By-name dump mirroring STRUCT FIELDS, one layer only.
-bool Modifier_toStringStruct(Modifier self, char *dest, size_t capacity, bool *outTruncated);
+bool Modifier_toStringStruct(Modifier self, char *dest, bytes capacity, bool *outTruncated);
 
 #endif

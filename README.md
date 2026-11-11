@@ -26,7 +26,7 @@ Store format and initial Database page-chain bridge: [`docs/store-format.md`](do
   zero/one/many matches and invalid schema/value spans. It is an in-memory linear
   scan, not a persistent index, numeric comparison or projection.
 - **Signed range query** — `Database_queryInt32Range` scans a validated four-byte
-  field as native signed `int32_t`, with inclusive bounds. Callers must ensure
+  field as native signed `i32`, with inclusive bounds. Callers must ensure
   the field bytes have that representation; no type coercion is performed.
 - **Persisted int32 index** — `Database_indexBuild` indexes one field whose
   reflected `Field` carries `REFLECT_FIELD_INDEXED`; the range query uses it when

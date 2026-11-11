@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "c23/constructor.h"
+#include "util/constructor.h"
 
 // wal/wal.h — the write-ahead log: the reason a crash mid-write is survivable.
 //
@@ -59,10 +59,10 @@ typedef enum WalOp {
 // A record as handed to the replay visitor: the payload is borrowed and valid only
 // for that call.
 typedef struct WalRecord {
-    uint32_t op;
-    uint64_t sequence;
-    const uint8_t *payload;
-    uint32_t length;
+    u32 op;
+    u64 sequence;
+    const u8 *payload;
+    u32 length;
 } WalRecord;
 
 // Standalone: false stops successfully. Region: false is WAL_INVALID (including
@@ -72,17 +72,17 @@ typedef bool (*WalVisitFn)(void *context, const WalRecord *record);
 typedef struct Wal {
     void *file;              // engine File* owner; void* keeps this header IO-free
     char path[WAL_PATH_MAX];
-    uint64_t baseSequence;   // last checkpointed sequence, from the header
-    uint64_t sequence;       // highest sequence written or recovered
-    uint32_t count;          // records appended since the last checkpoint
-    uint32_t recovered;      // records seen by the last successful replay
-    int32_t lastCode;        // last WalCode refusal
+    u64 baseSequence;   // last checkpointed sequence, from the header
+    u64 sequence;       // highest sequence written or recovered
+    u32 count;          // records appended since the last checkpoint
+    u32 recovered;      // records seen by the last successful replay
+    i32 lastCode;        // last WalCode refusal
     bool tailTorn;           // recovery found an incomplete trailing record
     bool open;
-    uint64_t offset;         // absolute region start; zero for standalone
-    uint64_t capacity;       // finite region extent including its header
-    uint64_t end;            // relative append position, adopted only on open/append
-    uint64_t exhaustionCount;
+    u64 offset;         // absolute region start; zero for standalone
+    u64 capacity;       // finite region extent including its header
+    u64 end;            // relative append position, adopted only on open/append
+    u64 exhaustionCount;
     bool region;
     bool poisoned;          // failed IO/corruption requires close and reopen
 } Wal;
@@ -98,7 +98,7 @@ Wal *Wal_1(const char *path);
 // Region record bytes are synced BEFORE publishing the commit marker; caller
 // must Wal_sync the marker BEFORE applying redo to data pages. IO failure poisons
 // this owner until reopen. An uncommitted tail is ignored and overwritten.
-Wal *Wal_3(const char *path, uint64_t offset, uint64_t capacity);
+Wal *Wal_3(const char *path, u64 offset, u64 capacity);
 #define Wal(...) CONSTRUCTOR_DISPATCH(Wal, __VA_ARGS__)
 #define Wal_zero() Wal_0()
 
@@ -106,31 +106,31 @@ void        Wal_free(Wal *self);
 bool        Wal_isOpen(const Wal *self);
 const char *Wal_path(const Wal *self);
 WalCode     Wal_code(const Wal *self);
-uint64_t    Wal_sequence(const Wal *self);
-uint64_t    Wal_baseSequence(const Wal *self);
-uint32_t    Wal_count(const Wal *self);
-uint32_t    Wal_recovered(const Wal *self);
+u64    Wal_sequence(const Wal *self);
+u64    Wal_baseSequence(const Wal *self);
+u32    Wal_count(const Wal *self);
+u32    Wal_recovered(const Wal *self);
 bool        Wal_tailTorn(const Wal *self);
-uint64_t    Wal_remaining(const Wal *self);
-uint64_t    Wal_exhaustionCount(const Wal *self);
+u64    Wal_remaining(const Wal *self);
+u64    Wal_exhaustionCount(const Wal *self);
 
 // Append one intent. Writes the record and does NOT sync: `Wal_sync` is the
 // durability boundary, and the caller acknowledges a mutation only after it.
-WalCode Wal_append(Wal *self, uint32_t op, const uint8_t *payload, uint32_t length,
-                   uint64_t *outSequence);
+WalCode Wal_append(Wal *self, u32 op, const u8 *payload, u32 length,
+                   u64 *outSequence);
 // Make every appended record durable on this host.
 WalCode Wal_sync(Wal *self);
 // Replay every valid record in order through the caller's buffer and visitor.
 // Returns TRUNCATED when the trailing record was dropped, CORRUPT when a complete
 // record failed its checksum.
-WalCode Wal_replay(Wal *self, uint8_t *scratch, size_t scratchCap,
+WalCode Wal_replay(Wal *self, u8 *scratch, bytes scratchCap,
                    WalVisitFn visit, void *context);
 // Truncate the log once the caller has made the DATA durable. The sequence keeps
 // counting up across a checkpoint; it never restarts.
 WalCode Wal_checkpoint(Wal *self);
 const char *Wal_codeName(WalCode code);
 
-bool Wal_toString(const Wal *self, char *dest, size_t capacity, bool *outTruncated);
-bool Wal_toStringStruct(const Wal *self, char *dest, size_t capacity, bool *outTruncated);
+bool Wal_toString(const Wal *self, char *dest, bytes capacity, bool *outTruncated);
+bool Wal_toStringStruct(const Wal *self, char *dest, bytes capacity, bool *outTruncated);
 
 #endif

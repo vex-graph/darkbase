@@ -45,13 +45,13 @@
 /** ========================================================================
  * CLASS: Modifier (oop/modifier.c)
  * STRUCT FIELDS (Mirroring oop/modifier.h)
- *   uint32_t access       ModifierAccess: private (default) or public
- *   uint32_t protection   ModifierProtection: plain/hashed/client-sealed/
+ *   u32 access       ModifierAccess: private (default) or public
+ *   u32 protection   ModifierProtection: plain/hashed/client-sealed/
  *                         server-sealed/truncated
- *   uint32_t nullability  ModifierNullability: nullable (default) or nonnull
+ *   u32 nullability  ModifierNullability: nullable (default) or nonnull
  *   bool     transient    not persisted: in-memory only
  *   bool     shared       "static": shared across rows
- *   int32_t  lastCode     last ModifierCode
+ *   i32  lastCode     last ModifierCode
  *
  * TOKEN GRAMMAR (Modifier_parse / Modifier_toString)
  *   <access> <protection> <nullability> [transient] [static]
@@ -70,7 +70,7 @@
  *   Validation:
  *     ModifierCode Modifier_validate(Modifier self)
  *     bool         Modifier_isAdmissible(Modifier self)
- *     uint32_t     Modifier_warnings(Modifier self)
+ *     u32     Modifier_warnings(Modifier self)
  *   Accessors:
  *     ModifierAccess      Modifier_getAccess(Modifier self)
  *     ModifierProtection  Modifier_getProtection(Modifier self)
@@ -83,14 +83,14 @@
  *     bool Modifier_equals(Modifier a, Modifier b.sh)
  *   Naming:
  *     const char *Modifier_accessName/protectionName/nullabilityName/codeName
- *     const char *Modifier_warningName(uint32_t warning)
+ *     const char *Modifier_warningName(u32 warning)
  *   Terminal path:
  *     Modifier Modifier_parse(const char *text)
  *     Modifier Modifier_applyToken(Modifier self, const char *token)
  *   Projections:
- *     bool Modifier_toString(Modifier self, char *dest, size_t capacity,
+ *     bool Modifier_toString(Modifier self, char *dest, bytes capacity,
  *                            bool *outTruncated)
- *     bool Modifier_toStringStruct(Modifier self, char *dest, size_t capacity,
+ *     bool Modifier_toStringStruct(Modifier self, char *dest, bytes capacity,
  *                                  bool *outTruncated)
  * PRIVATE HELPERS
  *   ModifierAxis { NONE, ACCESS, PROTECTION, NULLABILITY, TRANSIENT, SHARED }
@@ -136,25 +136,25 @@ static Modifier applyAxis(Modifier self, ModifierAxis axis, const char *token) {
     switch (axis) {
         case MODIFIER_AXIS_ACCESS:
             self.access = strcmp(token, "public") == 0
-                ? (uint32_t) MODIFIER_ACCESS_PUBLIC
-                : (uint32_t) MODIFIER_ACCESS_PRIVATE;
+                ? (u32) MODIFIER_ACCESS_PUBLIC
+                : (u32) MODIFIER_ACCESS_PRIVATE;
             break;
         case MODIFIER_AXIS_PROTECTION:
             if (strcmp(token, "hashed") == 0)
-                self.protection = (uint32_t) MODIFIER_PROTECTION_HASHED;
+                self.protection = (u32) MODIFIER_PROTECTION_HASHED;
             else if (strcmp(token, "client-sealed") == 0)
-                self.protection = (uint32_t) MODIFIER_PROTECTION_CLIENT_SEALED;
+                self.protection = (u32) MODIFIER_PROTECTION_CLIENT_SEALED;
             else if (strcmp(token, "server-sealed") == 0)
-                self.protection = (uint32_t) MODIFIER_PROTECTION_SERVER_SEALED;
+                self.protection = (u32) MODIFIER_PROTECTION_SERVER_SEALED;
             else if (strcmp(token, "truncated") == 0)
-                self.protection = (uint32_t) MODIFIER_PROTECTION_TRUNCATED;
+                self.protection = (u32) MODIFIER_PROTECTION_TRUNCATED;
             else
-                self.protection = (uint32_t) MODIFIER_PROTECTION_PLAIN;
+                self.protection = (u32) MODIFIER_PROTECTION_PLAIN;
             break;
         case MODIFIER_AXIS_NULLABILITY:
             self.nullability = strcmp(token, "nonnull") == 0
-                ? (uint32_t) MODIFIER_NONNULL
-                : (uint32_t) MODIFIER_NULLABLE;
+                ? (u32) MODIFIER_NONNULL
+                : (u32) MODIFIER_NULLABLE;
             break;
         case MODIFIER_AXIS_TRANSIENT:
             self.transient = true;
@@ -171,9 +171,9 @@ static Modifier applyAxis(Modifier self, ModifierAxis axis, const char *token) {
 
 Modifier Modifier_0(void) {
     Modifier self = {
-        .access = (uint32_t) MODIFIER_ACCESS_PRIVATE,
-        .protection = (uint32_t) MODIFIER_PROTECTION_PLAIN,
-        .nullability = (uint32_t) MODIFIER_NULLABLE,
+        .access = (u32) MODIFIER_ACCESS_PRIVATE,
+        .protection = (u32) MODIFIER_PROTECTION_PLAIN,
+        .nullability = (u32) MODIFIER_NULLABLE,
         .transient = false,
         .shared = false,
         .lastCode = MODIFIER_OK,
@@ -184,9 +184,9 @@ Modifier Modifier_0(void) {
 Modifier Modifier_3(ModifierAccess access, ModifierProtection protection,
                     ModifierNullability nullability) {
     Modifier self = Modifier_0();
-    self.access = (uint32_t) access;
-    self.protection = (uint32_t) protection;
-    self.nullability = (uint32_t) nullability;
+    self.access = (u32) access;
+    self.protection = (u32) protection;
+    self.nullability = (u32) nullability;
     self.lastCode = Modifier_validate(self);
     return self;
 }
@@ -200,11 +200,11 @@ Modifier Modifier_5(ModifierAccess access, ModifierProtection protection,
 }
 
 ModifierCode Modifier_validate(Modifier self) {
-    if (self.access > (uint32_t) MODIFIER_ACCESS_PUBLIC)
+    if (self.access > (u32) MODIFIER_ACCESS_PUBLIC)
         return MODIFIER_BAD_ACCESS;
-    if (self.protection > (uint32_t) MODIFIER_PROTECTION_TRUNCATED)
+    if (self.protection > (u32) MODIFIER_PROTECTION_TRUNCATED)
         return MODIFIER_BAD_PROTECTION;
-    if (self.nullability > (uint32_t) MODIFIER_NONNULL)
+    if (self.nullability > (u32) MODIFIER_NONNULL)
         return MODIFIER_BAD_NULLABILITY;
     return MODIFIER_OK;
 }
@@ -213,17 +213,17 @@ bool Modifier_isAdmissible(Modifier self) {
     return Modifier_validate(self) == MODIFIER_OK;
 }
 
-uint32_t Modifier_warnings(Modifier self) {
-    uint32_t flags = MODIFIER_WARNING_NONE;
-    if (self.access == (uint32_t) MODIFIER_ACCESS_PUBLIC &&
-        self.protection == (uint32_t) MODIFIER_PROTECTION_HASHED)
-        flags |= (uint32_t) MODIFIER_WARNING_PUBLIC_VERIFIER;
-    if (self.transient && self.protection != (uint32_t) MODIFIER_PROTECTION_PLAIN)
-        flags |= (uint32_t) MODIFIER_WARNING_TRANSIENT_PROTECTED;
+u32 Modifier_warnings(Modifier self) {
+    u32 flags = MODIFIER_WARNING_NONE;
+    if (self.access == (u32) MODIFIER_ACCESS_PUBLIC &&
+        self.protection == (u32) MODIFIER_PROTECTION_HASHED)
+        flags |= (u32) MODIFIER_WARNING_PUBLIC_VERIFIER;
+    if (self.transient && self.protection != (u32) MODIFIER_PROTECTION_PLAIN)
+        flags |= (u32) MODIFIER_WARNING_TRANSIENT_PROTECTED;
     if (self.shared && self.transient)
-        flags |= (uint32_t) MODIFIER_WARNING_SHARED_TRANSIENT;
-    if (self.protection == (uint32_t) MODIFIER_PROTECTION_TRUNCATED)
-        flags |= (uint32_t) MODIFIER_WARNING_LOSSY;
+        flags |= (u32) MODIFIER_WARNING_SHARED_TRANSIENT;
+    if (self.protection == (u32) MODIFIER_PROTECTION_TRUNCATED)
+        flags |= (u32) MODIFIER_WARNING_LOSSY;
     return flags;
 }
 
@@ -252,28 +252,28 @@ ModifierCode Modifier_code(Modifier self) {
 }
 
 bool Modifier_isPublic(Modifier self) {
-    return self.access == (uint32_t) MODIFIER_ACCESS_PUBLIC;
+    return self.access == (u32) MODIFIER_ACCESS_PUBLIC;
 }
 
 bool Modifier_isPrivate(Modifier self) {
-    return self.access == (uint32_t) MODIFIER_ACCESS_PRIVATE;
+    return self.access == (u32) MODIFIER_ACCESS_PRIVATE;
 }
 
 bool Modifier_isProtected(Modifier self) {
-    return self.protection != (uint32_t) MODIFIER_PROTECTION_PLAIN;
+    return self.protection != (u32) MODIFIER_PROTECTION_PLAIN;
 }
 
 bool Modifier_isReversible(Modifier self) {
-    return self.protection == (uint32_t) MODIFIER_PROTECTION_CLIENT_SEALED ||
-           self.protection == (uint32_t) MODIFIER_PROTECTION_SERVER_SEALED;
+    return self.protection == (u32) MODIFIER_PROTECTION_CLIENT_SEALED ||
+           self.protection == (u32) MODIFIER_PROTECTION_SERVER_SEALED;
 }
 
 bool Modifier_isOneWay(Modifier self) {
-    return self.protection == (uint32_t) MODIFIER_PROTECTION_HASHED;
+    return self.protection == (u32) MODIFIER_PROTECTION_HASHED;
 }
 
 bool Modifier_isLossy(Modifier self) {
-    return self.protection == (uint32_t) MODIFIER_PROTECTION_TRUNCATED;
+    return self.protection == (u32) MODIFIER_PROTECTION_TRUNCATED;
 }
 
 bool Modifier_equals(Modifier a, Modifier b) {
@@ -322,7 +322,7 @@ const char *Modifier_codeName(ModifierCode code) {
     }
 }
 
-const char *Modifier_warningName(uint32_t warning) {
+const char *Modifier_warningName(u32 warning) {
     switch (warning) {
         case MODIFIER_WARNING_NONE: return "none";
         case MODIFIER_WARNING_PUBLIC_VERIFIER: return "public-verifier";
@@ -354,13 +354,13 @@ Modifier Modifier_parse(const char *text) {
         return self;
     }
     bool seen[5] = { false, false, false, false, false };
-    size_t count = 0u;
+    bytes count = 0u;
     const char *cursor = text;
     while (*cursor != '\0') {
         cursor += strspn(cursor, " \t\r\n");
         if (*cursor == '\0')
             break;
-        size_t length = strcspn(cursor, " \t\r\n");
+        bytes length = strcspn(cursor, " \t\r\n");
         if (length == 0u || length >= MODIFIER_TOKEN_MAX) {
             self.lastCode = MODIFIER_BAD_TOKEN;
             THROW("Modifier_parse: modifier token over %u bytes",
@@ -376,7 +376,7 @@ Modifier Modifier_parse(const char *text) {
             THROW("Modifier_parse: unknown modifier token \"%s\"", token);
             return self;
         }
-        size_t index = (size_t) axis - 1u;
+        bytes index = (bytes) axis - 1u;
         if (seen[index]) {
             self.lastCode = MODIFIER_DUPLICATE;
             THROW("Modifier_parse: modifier axis named twice (\"%s\")", token);
@@ -385,7 +385,7 @@ Modifier Modifier_parse(const char *text) {
         seen[index] = true;
         self = applyAxis(self, axis, token);
         ++count;
-        if (count > (size_t) MODIFIER_TOKEN_LIMIT) {
+        if (count > (bytes) MODIFIER_TOKEN_LIMIT) {
             self.lastCode = MODIFIER_BAD_TOKEN;
             THROW("Modifier_parse: more than %u modifier tokens",
                   (unsigned) MODIFIER_TOKEN_LIMIT);
@@ -397,7 +397,7 @@ Modifier Modifier_parse(const char *text) {
     return self;
 }
 
-bool Modifier_toString(Modifier self, char *dest, size_t capacity, bool *outTruncated) {
+bool Modifier_toString(Modifier self, char *dest, bytes capacity, bool *outTruncated) {
     if (dest == nullptr || capacity == 0u) {
         if (outTruncated != nullptr)
             *outTruncated = true;
@@ -409,13 +409,13 @@ bool Modifier_toString(Modifier self, char *dest, size_t capacity, bool *outTrun
         Modifier_nullabilityName((ModifierNullability) self.nullability),
         self.transient ? ":transient" : "",
         self.shared ? ":static" : "");
-    bool cut = written < 0 || (size_t) written >= capacity;
+    bool cut = written < 0 || (bytes) written >= capacity;
     if (outTruncated != nullptr)
         *outTruncated = cut;
     return !cut;
 }
 
-bool Modifier_toStringStruct(Modifier self, char *dest, size_t capacity,
+bool Modifier_toStringStruct(Modifier self, char *dest, bytes capacity,
                              bool *outTruncated) {
     if (dest == nullptr || capacity == 0u) {
         if (outTruncated != nullptr)
@@ -430,7 +430,7 @@ bool Modifier_toStringStruct(Modifier self, char *dest, size_t capacity,
         Modifier_nullabilityName((ModifierNullability) self.nullability),
         self.transient ? 1 : 0, self.shared ? 1 : 0,
         Modifier_codeName((ModifierCode) self.lastCode));
-    bool cut = written < 0 || (size_t) written >= capacity;
+    bool cut = written < 0 || (bytes) written >= capacity;
     if (outTruncated != nullptr)
         *outTruncated = cut;
     return !cut;

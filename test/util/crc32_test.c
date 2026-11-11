@@ -8,10 +8,10 @@
 #include <string.h>
 
 int main(void) {
-    static const uint8_t vector[] = "123456789";
+    static const u8 vector[] = "123456789";
     assert(Crc32_of(vector, sizeof vector - 1u) == 0xCBF43926u);
 
-    uint32_t crc = CRC32_SEED;
+    u32 crc = CRC32_SEED;
     crc = Crc32_update(crc, vector, 4u);
     crc = Crc32_update(crc, vector + 4u, sizeof vector - 1u - 4u);
     assert(Crc32_finalize(crc) == Crc32_of(vector, sizeof vector - 1u));

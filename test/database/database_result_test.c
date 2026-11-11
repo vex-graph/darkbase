@@ -47,7 +47,7 @@ static int g_checks = 0;
     } while (0)
 
 typedef struct Row2 {
-    uint32_t v;
+    u32 v;
 } Row2;
 
 /** Verifies an empty cursor snapshots zero rows and handles null inputs safely. */
@@ -93,9 +93,9 @@ static void testWalk(void) {
     CHECK(Database_define(db, player) == 0);
 
     Row2 rows[8];
-    for (uint32_t i = 0u; i < 8u; i++) {
+    for (u32 i = 0u; i < 8u; i++) {
         rows[i].v = i * 10u;
-        CHECK(Database_insert(db, "player", &rows[i]) == (int32_t) i);
+        CHECK(Database_insert(db, "player", &rows[i]) == (i32) i);
     }
 
     DatabaseResult *r = Database_select(db, "player");
@@ -108,7 +108,7 @@ static void testWalk(void) {
     CHECK(DatabaseResult_count(r) == 8u);
 
     // Each next() yields the exact bound pointer, in insertion order.
-    for (uint32_t i = 0u; i < 8u; i++) {
+    for (u32 i = 0u; i < 8u; i++) {
         void *got = nullptr;
         CHECK(DatabaseResult_next(r, &got));
         CHECK(got == (void*) &rows[i]);
@@ -138,12 +138,12 @@ static void testWalk(void) {
 static void testOwnedPointerList(void) {
     printf("[3] owned match-list container, borrowed row values\n");
     ChunkedList *rows = ChunkedList_3(ID_DB_DATABASE_ROW,
-        (uint32_t) sizeof(void*), 256u);
+        (u32) sizeof(void*), 256u);
     Row2 row = {77u};
     CHECK(rows != nullptr);
     if (rows == nullptr)
         return;
-    uint8_t *slot = ChunkedList_addSlot(rows);
+    u8 *slot = ChunkedList_addSlot(rows);
     CHECK(slot != nullptr);
     if (slot == nullptr) {
         ChunkedList_free(rows);

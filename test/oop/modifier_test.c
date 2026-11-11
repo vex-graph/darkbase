@@ -19,7 +19,7 @@
 // would otherwise expand on the `Modifier (` sequence.
 typedef Modifier ModifierProbe(void);
 
-static size_t captureProbe(ModifierProbe probe, char *out, size_t cap) {
+static bytes captureProbe(ModifierProbe probe, char *out, bytes cap) {
     FILE *capture = tmpfile();
     assert(capture != nullptr);
     assert(fflush(stderr) == 0);
@@ -30,14 +30,14 @@ static size_t captureProbe(ModifierProbe probe, char *out, size_t cap) {
     assert(dup2(saved, STDERR_FILENO) >= 0);
     close(saved);
     rewind(capture);
-    size_t n = fread(out, 1u, cap - 1u, capture);
+    bytes n = fread(out, 1u, cap - 1u, capture);
     out[n] = '\0';
     fclose(capture);
     return n;
 }
 
-static size_t lineCount(const char *text) {
-    size_t lines = 0u;
+static bytes lineCount(const char *text) {
+    bytes lines = 0u;
     for (const char *p = text; *p != '\0'; ++p)
         if (*p == '\n')
             ++lines;
@@ -57,7 +57,7 @@ static Modifier probeQuiet(void) { return Modifier_parse("public hashed nullable
 
 static void checkReject(ModifierProbe probe, ModifierCode expected, const char *fragment) {
     char text[512];
-    size_t n = captureProbe(probe, text, sizeof text);
+    bytes n = captureProbe(probe, text, sizeof text);
     assert(n > 0u);
     assert(lineCount(text) == 1u);
     assert(strncmp(text, "[vex] ", 6u) == 0);
@@ -67,7 +67,7 @@ static void checkReject(ModifierProbe probe, ModifierCode expected, const char *
 
 static void checkQuiet(ModifierProbe probe) {
     char text[512];
-    size_t n = captureProbe(probe, text, sizeof text);
+    bytes n = captureProbe(probe, text, sizeof text);
     assert(n == 0u);
 }
 
@@ -126,13 +126,13 @@ int main(void) {
     assert(!Modifier_isOneWay(MODIFIER_PRIVATE_CLIENT_SEALED));
 
     assert(Modifier_warnings(MODIFIER_PUBLIC_HASHED) &
-           (uint32_t) MODIFIER_WARNING_PUBLIC_VERIFIER);
+           (u32) MODIFIER_WARNING_PUBLIC_VERIFIER);
     assert(Modifier_warnings(MODIFIER_PRIVATE_HASHED_NULLABLE_TRANSIENT) &
-           (uint32_t) MODIFIER_WARNING_TRANSIENT_PROTECTED);
+           (u32) MODIFIER_WARNING_TRANSIENT_PROTECTED);
     assert(Modifier_warnings(MODIFIER_PUBLIC_PLAIN_NULLABLE_TRANSIENT_STATIC) &
-           (uint32_t) MODIFIER_WARNING_SHARED_TRANSIENT);
+           (u32) MODIFIER_WARNING_SHARED_TRANSIENT);
     assert(Modifier_warnings(MODIFIER_PRIVATE_TRUNCATED) &
-           (uint32_t) MODIFIER_WARNING_LOSSY);
+           (u32) MODIFIER_WARNING_LOSSY);
     assert(Modifier_warnings(def) == MODIFIER_WARNING_NONE);
 
     // --- Names --------------------------------------------------------------

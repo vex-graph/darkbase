@@ -31,16 +31,16 @@
  *   ReGrowableMappedFile *mapping — resident reservation owner, dropped last
  *   Wal *wal — embedded redo descriptor in the same physical file
  *   Page *page — detached page builder/validator over scratch
- *   uint8_t *scratch — owned pageSize-byte scratch
- *   uint8_t *redo — owned STORE_REDO_BYTES + pageSize record
- *   size_t reserved — immutable virtual extent
- *   size_t journalBytes — caller-selected retained journal bound
- *   size_t dataOffset — checked first data-page offset
- *   uint32_t pageSize — immutable validated geometry
- *   uint32_t pageCount — allocation high-water id
- *   uint32_t freeHead — reusable free-page chain
- *   uint64_t sequence — last applied redo sequence
- *   uint64_t refusals — observable epoch capacity refusals
+ *   u8 *scratch — owned pageSize-byte scratch
+ *   u8 *redo — owned STORE_REDO_BYTES + pageSize record
+ *   bytes reserved — immutable virtual extent
+ *   bytes journalBytes — caller-selected retained journal bound
+ *   bytes dataOffset — checked first data-page offset
+ *   u32 pageSize — immutable validated geometry
+ *   u32 pageCount — allocation high-water id
+ *   u32 freeHead — reusable free-page chain
+ *   u64 sequence — last applied redo sequence
+ *   u64 refusals — observable epoch capacity refusals
  *   StoreCode code — last public result
  *   bool open — fully admitted owner
  *   bool blocked — uncertain commit, close/reopen required
@@ -48,23 +48,23 @@
  *   void *observerContext — borrowed observer-owned context
  * FUNCTION REGISTRY (exports):
  *   Store *Store_0(void); Store *Store_1(const char *path);
- *   Store *Store_4(const char *path, size_t reserved, uint32_t pageSize,
- *                  size_t journalBytes); void Store_free(Store *self);
- *   StoreCode Store_add(Store*, uint32_t, const uint8_t*, uint32_t, uint32_t*);
- *   StoreCode Store_page_write(Store*, uint32_t, uint32_t, const uint8_t*, uint32_t);
- *   StoreCode Store_page_release(Store*, uint32_t);
- *   StoreCode Store_page_read(Store*, uint32_t, uint8_t*, size_t, uint32_t*,
- *                             uint32_t*, bool*); StoreCode Store_sync(Store*);
+ *   Store *Store_4(const char *path, bytes reserved, u32 pageSize,
+ *                  bytes journalBytes); void Store_free(Store *self);
+ *   StoreCode Store_add(Store*, u32, const u8*, u32, u32*);
+ *   StoreCode Store_page_write(Store*, u32, u32, const u8*, u32);
+ *   StoreCode Store_page_release(Store*, u32);
+ *   StoreCode Store_page_read(Store*, u32, u8*, bytes, u32*,
+ *                             u32*, bool*); StoreCode Store_sync(Store*);
  *   bool Store_isOpen(const Store*); bool Store_isBlocked(const Store*);
- *   StoreCode Store_code(const Store*); uint32_t Store_pageSize(const Store*);
- *   uint32_t Store_pageCount(const Store*); uint32_t Store_freeHead(const Store*);
- *   size_t Store_reserved(const Store*); size_t Store_journalBytes(const Store*);
- *   uint64_t Store_sequence(const Store*); uint64_t Store_exhaustionCount(const Store*);
+ *   StoreCode Store_code(const Store*); u32 Store_pageSize(const Store*);
+ *   u32 Store_pageCount(const Store*); u32 Store_freeHead(const Store*);
+ *   bytes Store_reserved(const Store*); bytes Store_journalBytes(const Store*);
+ *   u64 Store_sequence(const Store*); u64 Store_exhaustionCount(const Store*);
  *   void Store_setCommitObserver(Store*, StoreCommitObserver, void*);
  *   StoreCommitObserver Store_getCommitObserver(const Store*);
  *   void *Store_getObserverContext(const Store*); const char *Store_codeName(StoreCode);
- *   bool Store_toString(const Store*, char*, size_t, bool*);
- *   bool Store_toStringStruct(const Store*, char*, size_t, bool*);
+ *   bool Store_toString(const Store*, char*, bytes, bool*);
+ *   bool Store_toStringStruct(const Store*, char*, bytes, bool*);
  * PRIVATE (static): read32/read64/put32/put64 native byte copies; reject/full/admit
  * admission; geometry/buffers construction; loadPage/pageOffset bounds; apply redo
  * validation/application; replay visitor; build/commit detached sealing and ordered
@@ -77,16 +77,16 @@
 
 // INTENTIONAL(vex): persisted integers are copied in native memory order on the
 // little-endian host floor; there is no byte swapping or parallel schema format.
-static const uint8_t storeMagic[8] = {'V','E','X','D','B','0','2',0};
+static const u8 storeMagic[8] = {'V','E','X','D','B','0','2',0};
 #define STORE_REDO_MAGIC 0x31524453u
 #define STORE_ALLOCATE 1u
 #define STORE_REPLACE 2u
 #define STORE_RELEASE 3u
 
-static uint32_t read32(const uint8_t *p) { uint32_t v; memcpy(&v, p, sizeof v); return v; }
-static uint64_t read64(const uint8_t *p) { uint64_t v; memcpy(&v, p, sizeof v); return v; }
-static void put32(uint8_t *p, uint32_t v) { memcpy(p, &v, sizeof v); }
-static void put64(uint8_t *p, uint64_t v) { memcpy(p, &v, sizeof v); }
+static u32 read32(const u8 *p) { u32 v; memcpy(&v, p, sizeof v); return v; }
+static u64 read64(const u8 *p) { u64 v; memcpy(&v, p, sizeof v); return v; }
+static void put32(u8 *p, u32 v) { memcpy(p, &v, sizeof v); }
+static void put64(u8 *p, u64 v) { memcpy(p, &v, sizeof v); }
 
 static StoreCode reject(Store *self, StoreCode code, const char *why) {
     if (self != nullptr)
@@ -95,7 +95,7 @@ static StoreCode reject(Store *self, StoreCode code, const char *why) {
     return code;
 }
 
-static StoreCode full(Store *self, size_t request, size_t bound) {
+static StoreCode full(Store *self, bytes request, bytes bound) {
     if ((*self).refusals == 0u)
         THROW("Store exhausted: request %zu bytes, bound %zu bytes", request, bound);
     if ((*self).refusals != UINT64_MAX)
@@ -116,10 +116,10 @@ static bool admit(Store *self) {
     return true;
 }
 
-static bool geometry(size_t reserved, uint32_t size, size_t journal) {
+static bool geometry(bytes reserved, u32 size, bytes journal) {
     return Page_sizeValid(size) && reserved <= INT64_MAX && reserved % size == 0u &&
-           journal % size == 0u && journal >= (size_t) size * 2u &&
-           journal <= reserved && reserved - journal >= (size_t) size * 2u &&
+           journal % size == 0u && journal >= (bytes) size * 2u &&
+           journal <= reserved && reserved - journal >= (bytes) size * 2u &&
            (reserved - journal - size) / size <= UINT32_MAX;
 }
 
@@ -147,19 +147,19 @@ void Store_free(Store *self) {
 }
 
 static bool buffers(Store *self) {
-    (*self).scratch = (uint8_t*) Memory_alloc(0u, (*self).pageSize);
-    (*self).redo = (uint8_t*) Memory_alloc(0u, STORE_REDO_BYTES + (*self).pageSize);
+    (*self).scratch = (u8*) Memory_alloc(0u, (*self).pageSize);
+    (*self).redo = (u8*) Memory_alloc(0u, STORE_REDO_BYTES + (*self).pageSize);
     if ((*self).scratch == nullptr || (*self).redo == nullptr)
         return false;
     (*self).page = Page_2((*self).scratch, (*self).pageSize);
     return (*self).page != nullptr;
 }
 
-static size_t pageOffset(const Store *self, uint32_t id) {
-    return (*self).dataOffset + (size_t) (id - 1u) * (*self).pageSize;
+static bytes pageOffset(const Store *self, u32 id) {
+    return (*self).dataOffset + (bytes) (id - 1u) * (*self).pageSize;
 }
 
-static StoreCode loadPage(Store *self, uint32_t id) {
+static StoreCode loadPage(Store *self, u32 id) {
     if (id == 0u || id > (*self).pageCount)
         return reject(self, STORE_INVALID, "page id outside allocation range");
     bool cut = false;
@@ -176,13 +176,13 @@ static StoreCode loadPage(Store *self, uint32_t id) {
 }
 
 static bool apply(Store *self, const WalRecord *record) {
-    const uint8_t *p = (*record).payload;
+    const u8 *p = (*record).payload;
     if ((*self).sequence == UINT64_MAX || (*record).sequence != (*self).sequence + 1u ||
         (*record).op != WAL_OP_UPDATE || (*record).length != STORE_REDO_BYTES + (*self).pageSize ||
         read32(p) != STORE_REDO_MAGIC || read32(p + 24u) != 0u || read32(p + 28u) != 0u)
         return false;
-    uint32_t op = read32(p + 4u), id = read32(p + 8u);
-    uint32_t count = read32(p + 12u), head = read32(p + 16u);
+    u32 op = read32(p + 4u), id = read32(p + 8u);
+    u32 count = read32(p + 12u), head = read32(p + 16u);
     if (id == 0u || count == 0u || id > count || head > count || read32(p + 20u) != 0u ||
         count > ((*self).reserved - (*self).dataOffset) / (*self).pageSize)
         return false;
@@ -193,7 +193,7 @@ static bool apply(Store *self, const WalRecord *record) {
         } else {
             if (id != (*self).freeHead || count != (*self).pageCount || head == id ||
                 loadPage(self, id) != STORE_OK || Page_kind((*self).page) != PAGE_KIND_FREE ||
-                Page_used((*self).page) != sizeof(uint32_t) || read32(Page_payloadOf((*self).page)) != head)
+                Page_used((*self).page) != sizeof(u32) || read32(Page_payloadOf((*self).page)) != head)
                 return false;
         }
     } else if (op == STORE_REPLACE) {
@@ -210,13 +210,13 @@ static bool apply(Store *self, const WalRecord *record) {
     if (Page_load((*self).page) != PAGE_OK || Page_id((*self).page) != id)
         return false;
     if (op == STORE_RELEASE) {
-        if (Page_kind((*self).page) != PAGE_KIND_FREE || Page_used((*self).page) != sizeof(uint32_t) ||
+        if (Page_kind((*self).page) != PAGE_KIND_FREE || Page_used((*self).page) != sizeof(u32) ||
             read32(Page_payloadOf((*self).page)) != (*self).freeHead)
             return false;
     } else if (Page_kind((*self).page) == PAGE_KIND_FREE)
         return false;
-    size_t end = (*self).dataOffset + (size_t) count * (*self).pageSize;
-    size_t current = 0u;
+    bytes end = (*self).dataOffset + (bytes) count * (*self).pageSize;
+    bytes current = 0u;
     if (re_gmap_len((*self).mapping, &current) != 0u ||
         (end > current && re_gmap_grow_to((*self).mapping, end) != 0u) ||
         re_gmap_write((*self).mapping, pageOffset(self, id), (*self).scratch, (*self).pageSize) != 0u)
@@ -229,7 +229,7 @@ static bool apply(Store *self, const WalRecord *record) {
 
 static bool replay(void *context, const WalRecord *record) { return apply((Store*) context, record); }
 
-Store *Store_4(const char *path, size_t reserved, uint32_t pageSize, size_t journalBytes) {
+Store *Store_4(const char *path, bytes reserved, u32 pageSize, bytes journalBytes) {
     if (path == nullptr || path[0] == '\0' || !geometry(reserved, pageSize, journalBytes)) {
         reject(nullptr, STORE_INVALID, "invalid path or reservation/journal geometry");
         return nullptr;
@@ -243,7 +243,7 @@ Store *Store_4(const char *path, size_t reserved, uint32_t pageSize, size_t jour
     (*self).dataOffset = pageSize + journalBytes;
     if (!buffers(self) || re_gmap_create(path, reserved, (*self).dataOffset, &(*self).mapping) != 0u)
         goto failure;
-    uint8_t bootstrap[STORE_BOOTSTRAP_BYTES] = {0};
+    u8 bootstrap[STORE_BOOTSTRAP_BYTES] = {0};
     memcpy(bootstrap, storeMagic, sizeof storeMagic);
     put32(bootstrap + 8u, STORE_FORMAT_VERSION);
     put32(bootstrap + 12u, pageSize);
@@ -274,7 +274,7 @@ Store *Store_1(const char *path) {
     }
     // Stable trusted path and caller exclusion cover this cold bootstrap read and
     // Rust's subsequent retained-descriptor admission; no hostile-writer TOCTOU claim.
-    uint8_t prefix[PAGE_HEADER_BYTES + STORE_BOOTSTRAP_BYTES];
+    u8 prefix[PAGE_HEADER_BYTES + STORE_BOOTSTRAP_BYTES];
     File *file = File_open(path, FILE_MODE_READ);
     if (file == nullptr) {
         reject(nullptr, STORE_IO, "bootstrap file could not be opened");
@@ -286,28 +286,28 @@ Store *Store_1(const char *path) {
         reject(nullptr, STORE_CORRUPT, "bootstrap absent or malformed");
         return nullptr;
     }
-    const uint8_t *b = prefix + PAGE_HEADER_BYTES;
-    uint32_t size = read32(b + 12u);
-    uint64_t reserved = read64(b + 16u), journal = read64(b + 24u);
+    const u8 *b = prefix + PAGE_HEADER_BYTES;
+    u32 size = read32(b + 12u);
+    u64 reserved = read64(b + 16u), journal = read64(b + 24u);
     if (reserved > SIZE_MAX || journal > SIZE_MAX || read32(b + 8u) != STORE_FORMAT_VERSION ||
-        !geometry((size_t) reserved, size, (size_t) journal) || read64(b + 32u) != size + journal) {
+        !geometry((bytes) reserved, size, (bytes) journal) || read64(b + 32u) != size + journal) {
         reject(nullptr, STORE_CORRUPT, "bootstrap geometry/version rejected");
         return nullptr;
     }
     Store *self = Store_0();
     if (self == nullptr)
         return nullptr;
-    (*self).reserved = (size_t) reserved;
-    (*self).journalBytes = (size_t) journal;
+    (*self).reserved = (bytes) reserved;
+    (*self).journalBytes = (bytes) journal;
     (*self).pageSize = size;
-    (*self).dataOffset = size + (size_t) journal;
+    (*self).dataOffset = size + (bytes) journal;
     bool cut = false;
     if (!buffers(self) || re_gmap_open(path, (*self).reserved, (*self).dataOffset, &(*self).mapping) != 0u ||
         re_gmap_read((*self).mapping, 0u, size, (*self).scratch, size, &cut) != 0u ||
         Page_load((*self).page) != PAGE_OK || Page_id((*self).page) != 0u ||
         Page_kind((*self).page) != PAGE_KIND_CATALOG || Page_used((*self).page) != STORE_BOOTSTRAP_BYTES)
         goto failure;
-    for (size_t i = 40u; i < STORE_BOOTSTRAP_BYTES; ++i)
+    for (bytes i = 40u; i < STORE_BOOTSTRAP_BYTES; ++i)
         if ((*self).scratch[PAGE_HEADER_BYTES + i] != 0u)
             goto failure;
     (*self).wal = Wal_3(path, size, (*self).journalBytes);
@@ -319,11 +319,11 @@ Store *Store_1(const char *path) {
         re_gmap_sync((*self).mapping) != 0u)
         goto failure;
     // Validate the complete free chain with a count-derived budget before admission.
-    uint32_t next = (*self).freeHead;
-    uint32_t visits = 0u;
+    u32 next = (*self).freeHead;
+    u32 visits = 0u;
     while (next != 0u) {
         if (++visits > (*self).pageCount || loadPage(self, next) != STORE_OK ||
-            Page_kind((*self).page) != PAGE_KIND_FREE || Page_used((*self).page) != sizeof(uint32_t))
+            Page_kind((*self).page) != PAGE_KIND_FREE || Page_used((*self).page) != sizeof(u32))
             goto failure;
         next = read32(Page_payloadOf((*self).page));
     }
@@ -340,8 +340,8 @@ static void observe(Store *self, unsigned phase) {
         (*self).observer((*self).observerContext, phase);
 }
 
-static StoreCode commit(Store *self, uint32_t op, uint32_t id, uint32_t count, uint32_t head) {
-    uint8_t *r = (*self).redo;
+static StoreCode commit(Store *self, u32 op, u32 id, u32 count, u32 head) {
+    u8 *r = (*self).redo;
     memset(r, 0, STORE_REDO_BYTES);
     put32(r, STORE_REDO_MAGIC);
     put32(r + 4u, op);
@@ -349,7 +349,7 @@ static StoreCode commit(Store *self, uint32_t op, uint32_t id, uint32_t count, u
     put32(r + 12u, count);
     put32(r + 16u, head);
     memcpy(r + STORE_REDO_BYTES, (*self).scratch, (*self).pageSize);
-    uint64_t sequence = 0u;
+    u64 sequence = 0u;
     WalCode code = Wal_append((*self).wal, WAL_OP_UPDATE, r, STORE_REDO_BYTES + (*self).pageSize, &sequence);
     if (code == WAL_FULL)
         return full(self, STORE_REDO_BYTES + (*self).pageSize, (*self).journalBytes);
@@ -373,23 +373,23 @@ static StoreCode commit(Store *self, uint32_t op, uint32_t id, uint32_t count, u
     return STORE_OK;
 }
 
-static bool build(Store *self, uint32_t id, uint32_t kind, const uint8_t *bytes, uint32_t length) {
+static bool build(Store *self, u32 id, u32 kind, const u8 *bytes, u32 length) {
     return Page_format((*self).page, id, kind) == PAGE_OK &&
            Page_append((*self).page, bytes, length) == PAGE_OK && Page_seal((*self).page) == PAGE_OK;
 }
 
-StoreCode Store_add(Store *self, uint32_t kind, const uint8_t *bytes, uint32_t length, uint32_t *outPageId) {
+StoreCode Store_add(Store *self, u32 kind, const u8 *bytes, u32 length, u32 *outPageId) {
     if (!admit(self))
         return Store_code(self);
     if (outPageId == nullptr || kind == PAGE_KIND_FREE || kind > PAGE_KIND_CATALOG ||
         (bytes == nullptr && length != 0u) || length > (*self).pageSize - PAGE_HEADER_BYTES)
         return reject(self, STORE_INVALID, "invalid page append input");
-    uint32_t id = (*self).freeHead, head = 0u, count = (*self).pageCount;
+    u32 id = (*self).freeHead, head = 0u, count = (*self).pageCount;
     if (id != 0u) {
         StoreCode code = loadPage(self, id);
         if (code != STORE_OK)
             return code;
-        if (Page_kind((*self).page) != PAGE_KIND_FREE || Page_used((*self).page) != sizeof(uint32_t))
+        if (Page_kind((*self).page) != PAGE_KIND_FREE || Page_used((*self).page) != sizeof(u32))
             return reject(self, STORE_CORRUPT, "free-head page is not a free record");
         head = read32(Page_payloadOf((*self).page));
         if (head > count || head == id)
@@ -408,7 +408,7 @@ StoreCode Store_add(Store *self, uint32_t kind, const uint8_t *bytes, uint32_t l
     return code;
 }
 
-StoreCode Store_page_write(Store *self, uint32_t id, uint32_t kind, const uint8_t *bytes, uint32_t length) {
+StoreCode Store_page_write(Store *self, u32 id, u32 kind, const u8 *bytes, u32 length) {
     if (!admit(self))
         return Store_code(self);
     if (kind == PAGE_KIND_FREE || kind > PAGE_KIND_CATALOG || (bytes == nullptr && length != 0u) ||
@@ -424,7 +424,7 @@ StoreCode Store_page_write(Store *self, uint32_t id, uint32_t kind, const uint8_
     return commit(self, STORE_REPLACE, id, (*self).pageCount, (*self).freeHead);
 }
 
-StoreCode Store_page_release(Store *self, uint32_t id) {
+StoreCode Store_page_release(Store *self, u32 id) {
     if (!admit(self))
         return Store_code(self);
     StoreCode code = loadPage(self, id);
@@ -432,14 +432,14 @@ StoreCode Store_page_release(Store *self, uint32_t id) {
         return code;
     if (Page_kind((*self).page) == PAGE_KIND_FREE)
         return reject(self, STORE_INVALID, "page already released");
-    uint32_t next = (*self).freeHead;
-    if (!build(self, id, PAGE_KIND_FREE, (const uint8_t*) &next, sizeof next))
+    u32 next = (*self).freeHead;
+    if (!build(self, id, PAGE_KIND_FREE, (const u8*) &next, sizeof next))
         return STORE_INVALID;
     return commit(self, STORE_RELEASE, id, (*self).pageCount, id);
 }
 
-StoreCode Store_page_read(Store *self, uint32_t id, uint8_t *dest, size_t capacity,
-                          uint32_t *outLength, uint32_t *outKind, bool *outTruncated) {
+StoreCode Store_page_read(Store *self, u32 id, u8 *dest, bytes capacity,
+                          u32 *outLength, u32 *outKind, bool *outTruncated) {
     if (!admit(self))
         return Store_code(self);
     if (dest == nullptr || outLength == nullptr || outKind == nullptr || outTruncated == nullptr)
@@ -449,7 +449,7 @@ StoreCode Store_page_read(Store *self, uint32_t id, uint8_t *dest, size_t capaci
         return code;
     if (Page_kind((*self).page) == PAGE_KIND_FREE)
         return reject(self, STORE_INVALID, "page is released");
-    uint32_t length = Page_used((*self).page);
+    u32 length = Page_used((*self).page);
     if (capacity < length) {
         *outTruncated = true;
         return reject(self, STORE_TRUNCATED, "read destination too small; no bytes copied");
@@ -477,13 +477,13 @@ StoreCode Store_sync(Store *self) {
 bool Store_isOpen(const Store *self) { return self != nullptr && (*self).open; }
 bool Store_isBlocked(const Store *self) { return self != nullptr && (*self).blocked; }
 StoreCode Store_code(const Store *self) { return self == nullptr ? STORE_CLOSED : (*self).code; }
-uint32_t Store_pageSize(const Store *self) { return self == nullptr ? 0u : (*self).pageSize; }
-uint32_t Store_pageCount(const Store *self) { return self == nullptr ? 0u : (*self).pageCount; }
-uint32_t Store_freeHead(const Store *self) { return self == nullptr ? 0u : (*self).freeHead; }
-size_t Store_reserved(const Store *self) { return self == nullptr ? 0u : (*self).reserved; }
-size_t Store_journalBytes(const Store *self) { return self == nullptr ? 0u : (*self).journalBytes; }
-uint64_t Store_sequence(const Store *self) { return self == nullptr ? 0u : (*self).sequence; }
-uint64_t Store_exhaustionCount(const Store *self) { return self == nullptr ? 0u : (*self).refusals; }
+u32 Store_pageSize(const Store *self) { return self == nullptr ? 0u : (*self).pageSize; }
+u32 Store_pageCount(const Store *self) { return self == nullptr ? 0u : (*self).pageCount; }
+u32 Store_freeHead(const Store *self) { return self == nullptr ? 0u : (*self).freeHead; }
+bytes Store_reserved(const Store *self) { return self == nullptr ? 0u : (*self).reserved; }
+bytes Store_journalBytes(const Store *self) { return self == nullptr ? 0u : (*self).journalBytes; }
+u64 Store_sequence(const Store *self) { return self == nullptr ? 0u : (*self).sequence; }
+u64 Store_exhaustionCount(const Store *self) { return self == nullptr ? 0u : (*self).refusals; }
 void Store_setCommitObserver(Store *self, StoreCommitObserver observer, void *context) {
     if (self != nullptr) {
         (*self).observer = observer;
@@ -506,7 +506,7 @@ const char *Store_codeName(StoreCode code) {
     }
 }
 
-static bool project(const Store *self, bool structure, char *dest, size_t capacity, bool *outTruncated) {
+static bool project(const Store *self, bool structure, char *dest, bytes capacity, bool *outTruncated) {
     if (dest == nullptr || capacity == 0u) {
         if (outTruncated != nullptr)
             *outTruncated = true;
@@ -529,14 +529,14 @@ static bool project(const Store *self, bool structure, char *dest, size_t capaci
             (*self).dataOffset, (*self).pageSize, (*self).pageCount, (*self).freeHead,
             (unsigned long long) (*self).sequence, (unsigned long long) (*self).refusals,
             Store_codeName((*self).code), (*self).open, (*self).blocked, (*self).observer ? "set" : "nullptr");
-    bool cut = n < 0 || (size_t) n >= capacity;
+    bool cut = n < 0 || (bytes) n >= capacity;
     if (outTruncated != nullptr)
         *outTruncated = cut;
     return !cut;
 }
-bool Store_toString(const Store *self, char *dest, size_t capacity, bool *outTruncated) {
+bool Store_toString(const Store *self, char *dest, bytes capacity, bool *outTruncated) {
     return project(self, false, dest, capacity, outTruncated);
 }
-bool Store_toStringStruct(const Store *self, char *dest, size_t capacity, bool *outTruncated) {
+bool Store_toStringStruct(const Store *self, char *dest, bytes capacity, bool *outTruncated) {
     return project(self, true, dest, capacity, outTruncated);
 }

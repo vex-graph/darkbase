@@ -32,7 +32,7 @@ def main():
         for call in ("HeadlessProtocol(backing)", "HeadlessProtocol(backing, 16, 0)"):
             negative = Path(directory) / "arity.c"
             negative.write_text('#include "protocol/headless_protocol.h"\n'
-                                f'int main(void) {{ uint8_t backing[16]; (void) {call}; }}\n')
+                                f'int main(void) {{ u8 backing[16]; (void) {call}; }}\n')
             result = subprocess.run(base + ["-fsyntax-only", str(negative)], capture_output=True,
                                     text=True, timeout=30)
             assert result.returncode != 0 and "HeadlessProtocol_" in result.stderr, result.stderr

@@ -33,7 +33,7 @@
  * STRUCT FIELDS: none — procedural test harness.
  *
  * PRIVATE HELPER RECORD:
- *   DatabaseCrashProbe { uint32_t commits; } // completed redo-marker callbacks
+ *   DatabaseCrashProbe { u32 commits; } // completed redo-marker callbacks
  *
  * FUNCTION REGISTRY:
  *   - crashAtDatabaseRoot(context, phase) // child exits at root redo boundary
@@ -51,7 +51,7 @@ static int g_fail = 0;
 static int g_checks = 0;
 
 typedef struct DatabaseCrashProbe {
-    uint32_t commits;
+    u32 commits;
 } DatabaseCrashProbe;
 
 /** Terminates after the root redo marker is durable but before page apply. */
@@ -72,7 +72,7 @@ static void crashAtDatabaseRoot(void *context, unsigned phase) {
 
 typedef struct Row {
     uintptr_t id;
-    int32_t health;
+    i32 health;
 } Row;
 
 /** Verifies database construction, type identity, null-safe access, and destruction. */
@@ -158,14 +158,14 @@ static void testInsertAndRead(void) {
     CHECK(Database_define(db, player) == 0);
 
     Row rows[64];
-    for (uint32_t i = 0u; i < 64u; i++) {
+    for (u32 i = 0u; i < 64u; i++) {
         rows[i].id = 100u + i;
-        rows[i].health = (int32_t) i;
+        rows[i].health = (i32) i;
     }
 
     CHECK(Database_count(db, "player") == 0u);
-    for (uint32_t i = 0u; i < 64u; i++)
-        CHECK(Database_insert(db, "player", &rows[i]) == (int32_t) i);
+    for (u32 i = 0u; i < 64u; i++)
+        CHECK(Database_insert(db, "player", &rows[i]) == (i32) i);
     CHECK(Database_count(db, "player") == 64u);
     CHECK(Database_errorCode(db) == DATABASE_OK);
 
@@ -198,14 +198,14 @@ static void testInsertOwned(void) {
         Struct_free(player);
         return;
     }
-    Struct_setSize(player, (uint32_t) sizeof(Row));
+    Struct_setSize(player, (u32) sizeof(Row));
     CHECK(Database_define(db, player) == 0);
 
     Row borrowed = { 17u, 23 };
     CHECK(Database_insertOwned(db, "player", &borrowed, sizeof borrowed - 1u) == -1);
     CHECK(Database_errorCode(db) == DATABASE_INVALID);
     CHECK(Database_count(db, "player") == 0u);
-    uint8_t oversized[sizeof(Row) + 1u] = {0};
+    u8 oversized[sizeof(Row) + 1u] = {0};
     CHECK(Database_insertOwned(db, "player", oversized, sizeof oversized) == -1);
     CHECK(Database_count(db, "player") == 0u);
     CHECK(Database_insert(db, "player", &borrowed) == 0); // bad owned size did not change mode
@@ -223,7 +223,7 @@ static void testInsertOwned(void) {
         Struct_free(player);
         return;
     }
-    Struct_setSize(player, (uint32_t) sizeof(Row));
+    Struct_setSize(player, (u32) sizeof(Row));
     CHECK(Database_define(db, player) == 0);
     Row input = { 29u, 31 };
     CHECK(Database_insertOwned(db, "player", &input, sizeof input) == 0);
@@ -252,7 +252,7 @@ static void testDiagnostics(void) {
 
     char buf[128];
     int len = Database_lastError(db, buf, sizeof(buf));
-    CHECK(len > 0 && (size_t) len == strlen(buf));
+    CHECK(len > 0 && (bytes) len == strlen(buf));
     CHECK(strstr(buf, "define") != nullptr);
 
     // A too-small destination truncates silently at the byte level (bounded).
@@ -296,14 +296,14 @@ static void testPersistence(void) {
         Struct_free(player);
         return;
     }
-    Struct_setSize(player, (uint32_t) sizeof(Row));
+    Struct_setSize(player, (u32) sizeof(Row));
     CHECK(Database_define(db, player) == 0);
 
     Row rows[4];
-    for (uint32_t i = 0u; i < 4u; i++) {
+    for (u32 i = 0u; i < 4u; i++) {
         rows[i].id = 7u + i;
-        rows[i].health = (int32_t) (i + 1u);
-        CHECK(Database_insert(db, "player", &rows[i]) == (int32_t) i);
+        rows[i].health = (i32) (i + 1u);
+        CHECK(Database_insert(db, "player", &rows[i]) == (i32) i);
     }
     CHECK(Database_save(db, path) == DATABASE_OK);
 
@@ -319,13 +319,13 @@ static void testPersistence(void) {
         Struct_free(player);
         return;
     }
-    Struct_setSize(player2, (uint32_t) sizeof(Row));
+    Struct_setSize(player2, (u32) sizeof(Row));
     CHECK(Database_define(db2, player2) == 0);
     CHECK(Database_load(db2, path) == DATABASE_OK);
     CHECK(Database_count(db2, "player") == 4u);
-    for (uint32_t i = 0u; i < 4u; i++) {
+    for (u32 i = 0u; i < 4u; i++) {
         Row *got = (Row*) Database_row(db2, "player", i);
-        CHECK(got != nullptr && (*got).id == 7u + i && (*got).health == (int32_t) (i + 1u));
+        CHECK(got != nullptr && (*got).id == 7u + i && (*got).health == (i32) (i + 1u));
     }
 
     // Loaded rows are owned: binding a live row into them rejects.
@@ -362,7 +362,7 @@ static void testPersistence(void) {
     Struct *player3 = Struct("player");
     CHECK(db3 && player3);
     if (db3 && player3) {
-        Struct_setSize(player3, (uint32_t) sizeof(Row));
+        Struct_setSize(player3, (u32) sizeof(Row));
         CHECK(Database_define(db3, player3) == 0);
         CHECK(Database_load(db3, path) == DATABASE_INVALID);
         CHECK(Database_count(db3, "player") == 0u); // nothing loaded
@@ -398,12 +398,12 @@ static void testSafeSave(void) {
     // First snapshot: 4 rows.
     Database *a = Database();
     Struct *sa = Struct("player");
-    Struct_setSize(sa, (uint32_t) sizeof(Row));
+    Struct_setSize(sa, (u32) sizeof(Row));
     CHECK(Database_define(a, sa) == 0);
     Row ra[4];
-    for (uint32_t i = 0u; i < 4u; i++) {
+    for (u32 i = 0u; i < 4u; i++) {
         ra[i].id = 1u;
-        ra[i].health = (int32_t) i;
+        ra[i].health = (i32) i;
         Database_insert(a, "player", &ra[i]);
     }
     CHECK(Database_save(a, path) == DATABASE_OK);
@@ -412,12 +412,12 @@ static void testSafeSave(void) {
     // Replace with a bigger snapshot: 6 rows.
     Database *b = Database();
     Struct *sb = Struct("player");
-    Struct_setSize(sb, (uint32_t) sizeof(Row));
+    Struct_setSize(sb, (u32) sizeof(Row));
     CHECK(Database_define(b, sb) == 0);
     Row rb[6];
-    for (uint32_t i = 0u; i < 6u; i++) {
+    for (u32 i = 0u; i < 6u; i++) {
         rb[i].id = 2u;
-        rb[i].health = (int32_t) (10 + i);
+        rb[i].health = (i32) (10 + i);
         Database_insert(b, "player", &rb[i]);
     }
     CHECK(Database_save(b, path) == DATABASE_OK);
@@ -426,7 +426,7 @@ static void testSafeSave(void) {
     // The destination now holds the new snapshot (atomic replace, not truncate).
     Database *c = Database();
     Struct *sc = Struct("player");
-    Struct_setSize(sc, (uint32_t) sizeof(Row));
+    Struct_setSize(sc, (u32) sizeof(Row));
     Database_define(c, sc);
     CHECK(Database_load(c, path) == DATABASE_OK);
     CHECK(Database_count(c, "player") == 6u);
@@ -442,7 +442,7 @@ static void testSafeSave(void) {
     // The prior snapshot survives the failed save.
     Database *e = Database();
     Struct *se = Struct("player");
-    Struct_setSize(se, (uint32_t) sizeof(Row));
+    Struct_setSize(se, (u32) sizeof(Row));
     Database_define(e, se);
     CHECK(Database_load(e, path) == DATABASE_OK);
     CHECK(Database_count(e, "player") == 6u);
@@ -487,19 +487,19 @@ static void testPageStorePersistence(void) {
         remove(path);
         return;
     }
-    Struct_setSize(schema, (uint32_t) sizeof(Row));
+    Struct_setSize(schema, (u32) sizeof(Row));
     Field *idField = Field("id");
     CHECK(idField != nullptr);
     if (idField != nullptr) {
-        Field_setOffset(idField, (uint32_t) offsetof(Row, id));
-        Field_setSize(idField, (uint32_t) sizeof((*((Row*) nullptr)).id));
+        Field_setOffset(idField, (u32) offsetof(Row, id));
+        Field_setSize(idField, (u32) sizeof((*((Row*) nullptr)).id));
         CHECK(Struct_add(schema, idField) == 0u);
         Field_free(idField);
     }
     CHECK(Database_define(db, schema) == 0);
     Row source[3] = {{41u, 51}, {42u, 52}, {43u, 53}};
-    for (uint32_t i = 0u; i < 3u; i++)
-        CHECK(Database_insertOwned(db, "player", &source[i], sizeof(Row)) == (int32_t) i);
+    for (u32 i = 0u; i < 3u; i++)
+        CHECK(Database_insertOwned(db, "player", &source[i], sizeof(Row)) == (i32) i);
     CHECK(Database_saveStore(db, store) == DATABASE_OK);
     CHECK(Store_pageCount(store) >= 2u);
     Row *changed = (Row*) Database_row(db, "player", 0u);
@@ -520,9 +520,9 @@ static void testPageStorePersistence(void) {
     Struct *wrongSchema = Struct("player");
     CHECK(mismatch != nullptr && wrongSchema != nullptr);
     if (mismatch != nullptr && wrongSchema != nullptr && store != nullptr) {
-        Struct_setSize(wrongSchema, (uint32_t) sizeof(Row) + 1u);
+        Struct_setSize(wrongSchema, (u32) sizeof(Row) + 1u);
         CHECK(Database_define(mismatch, wrongSchema) == 0);
-        uint8_t priorBytes[sizeof(Row) + 1u] = {0u};
+        u8 priorBytes[sizeof(Row) + 1u] = {0u};
         Row priorRow = {71u, 81};
         memcpy(priorBytes, &priorRow, sizeof(priorRow));
         priorBytes[sizeof(Row)] = 0x5Au;
@@ -533,7 +533,7 @@ static void testPageStorePersistence(void) {
         Row *preserved = (Row*) Database_row(mismatch, "player", 0u);
         CHECK(preserved != nullptr && (*preserved).id == priorRow.id &&
               (*preserved).health == priorRow.health);
-        uint8_t *preservedBytes = (uint8_t*) preserved;
+        u8 *preservedBytes = (u8*) preserved;
         CHECK(preservedBytes != nullptr &&
               preservedBytes[sizeof(Row)] == 0x5Au);
     }
@@ -542,12 +542,12 @@ static void testPageStorePersistence(void) {
     DatabaseCatalogEntry retainedEntry;
     memset(&retainedEntry, 0, sizeof(retainedEntry));
     if (store != nullptr && db != nullptr && schema != nullptr) {
-        Struct_setSize(schema, (uint32_t) sizeof(Row));
+        Struct_setSize(schema, (u32) sizeof(Row));
         idField = Field("id");
         CHECK(idField != nullptr);
         if (idField != nullptr) {
-            Field_setOffset(idField, (uint32_t) offsetof(Row, id));
-            Field_setSize(idField, (uint32_t) sizeof((*((Row*) nullptr)).id));
+            Field_setOffset(idField, (u32) offsetof(Row, id));
+            Field_setSize(idField, (u32) sizeof((*((Row*) nullptr)).id));
             CHECK(Struct_add(schema, idField) == 0u);
             Field_free(idField);
         }
@@ -561,7 +561,7 @@ static void testPageStorePersistence(void) {
               catalogEntry.rowStride == sizeof(Row) && catalogEntry.rowCount == 3u);
         DatabaseCatalogEntry absentEntry = Database_storeCatalogEntry(store, 1u);
         CHECK(absentEntry.code == DATABASE_ABSENT && !absentEntry.found);
-        for (uint32_t i = 0u; i < 3u; i++) {
+        for (u32 i = 0u; i < 3u; i++) {
             Row *row = (Row*) Database_row(db, "player", i);
             CHECK(row != nullptr && (*row).id == source[i].id &&
                   (*row).health == source[i].health); // rejected replacement preserved old root
@@ -610,7 +610,7 @@ static void testPageStoreRecovery(void) {
         Struct *childSchema = Struct("player");
         if (childStore == nullptr || childDb == nullptr || childSchema == nullptr)
             _exit(80);
-        Struct_setSize(childSchema, (uint32_t) sizeof(Row));
+        Struct_setSize(childSchema, (u32) sizeof(Row));
         if (Database_define(childDb, childSchema) != 0)
             _exit(81);
         Row source = {91u, 101};
@@ -636,7 +636,7 @@ static void testPageStoreRecovery(void) {
     CHECK(store != nullptr && Store_isOpen(store));
     CHECK(db != nullptr && schema != nullptr);
     if (store != nullptr && db != nullptr && schema != nullptr) {
-        Struct_setSize(schema, (uint32_t) sizeof(Row));
+        Struct_setSize(schema, (u32) sizeof(Row));
         CHECK(Database_define(db, schema) == 0);
         CHECK(Database_loadStore(db, store) == DATABASE_OK);
         CHECK(Database_count(db, "player") == 1u);
@@ -668,13 +668,13 @@ static void testStructuredEqualityQuery(void) {
         Field_free(badField);
         return;
     }
-    Struct_setSize(schema, (uint32_t) sizeof(Row));
-    Field_setOffset(idField, (uint32_t) offsetof(Row, id));
-    Field_setSize(idField, (uint32_t) sizeof((*((Row*) nullptr)).id));
-    Field_setOffset(healthField, (uint32_t) offsetof(Row, health));
-    Field_setSize(healthField, (uint32_t) sizeof((*((Row*) nullptr)).health));
+    Struct_setSize(schema, (u32) sizeof(Row));
+    Field_setOffset(idField, (u32) offsetof(Row, id));
+    Field_setSize(idField, (u32) sizeof((*((Row*) nullptr)).id));
+    Field_setOffset(healthField, (u32) offsetof(Row, health));
+    Field_setSize(healthField, (u32) sizeof((*((Row*) nullptr)).health));
     Field_setFlags(healthField, REFLECT_FIELD_INDEXED); // the index declaration
-    Field_setOffset(badField, (uint32_t) sizeof(Row) - 1u);
+    Field_setOffset(badField, (u32) sizeof(Row) - 1u);
     Field_setSize(badField, 2u);
     CHECK(Struct_add(schema, idField) == 0u);
     CHECK(Struct_add(schema, healthField) == 1u);
@@ -685,8 +685,8 @@ static void testStructuredEqualityQuery(void) {
     CHECK(Database_define(db, schema) == 0);
     Row source[6] = {{5u, 11}, {7u, 13}, {5u, 17}, {9u, 19},
                      {11u, INT32_MIN}, {13u, INT32_MAX}};
-    for (uint32_t i = 0u; i < 6u; i++)
-        CHECK(Database_insertOwned(db, "player", &source[i], sizeof(Row)) == (int32_t) i);
+    for (u32 i = 0u; i < 6u; i++)
+        CHECK(Database_insertOwned(db, "player", &source[i], sizeof(Row)) == (i32) i);
 
     uintptr_t wanted = 5u;
     DatabaseResult *matches = Database_queryEqual(db, "player", "id",
@@ -705,9 +705,9 @@ static void testStructuredEqualityQuery(void) {
     matches = Database_queryEqual(db, "player", "id", &absent, sizeof(absent));
     CHECK(matches != nullptr && DatabaseResult_count(matches) == 0u);
     DatabaseResult_free(matches);
-    CHECK(Database_queryEqual(db, "player", "id", &wanted, sizeof(uint16_t)) == nullptr);
+    CHECK(Database_queryEqual(db, "player", "id", &wanted, sizeof(u16)) == nullptr);
     CHECK(Database_errorCode(db) == DATABASE_INVALID);
-    CHECK(Database_queryEqual(db, "player", "bad", &wanted, sizeof(uint32_t)) == nullptr);
+    CHECK(Database_queryEqual(db, "player", "bad", &wanted, sizeof(u32)) == nullptr);
     CHECK(Database_errorCode(db) == DATABASE_INVALID);
     CHECK(Database_queryEqual(db, "player", "missing", &wanted, sizeof(wanted)) == nullptr);
     CHECK(Database_errorCode(db) == DATABASE_ABSENT);
@@ -789,17 +789,17 @@ static void testStructuredEqualityQuery(void) {
     //     field's Bytes live, and reads them through the answer.
     DatabaseFieldSpan span = Database_fieldSpan(db, "player", "health");
     CHECK(span.code == DATABASE_OK);
-    CHECK(span.offset == (uint32_t) offsetof(Row, health));
-    CHECK(span.size == (uint32_t) sizeof((*((Row*) nullptr)).health));
+    CHECK(span.offset == (u32) offsetof(Row, health));
+    CHECK(span.size == (u32) sizeof((*((Row*) nullptr)).health));
     span = Database_fieldSpan(db, "PLAYER", "Health"); // folded: case is irrelevant
-    CHECK(span.code == DATABASE_OK && span.offset == (uint32_t) offsetof(Row, health));
+    CHECK(span.code == DATABASE_OK && span.offset == (u32) offsetof(Row, health));
     span = Database_fieldSpan(db, "player", "id");
     CHECK(span.code == DATABASE_OK);
     void *freshRow = Database_row(db, "player", 0u);
     CHECK(freshRow != nullptr);
     if (freshRow != nullptr && span.code == DATABASE_OK) {
-        uint32_t id = 0u;
-        memcpy(&id, (const uint8_t*) freshRow + span.offset, sizeof(id));
+        u32 id = 0u;
+        memcpy(&id, (const u8*) freshRow + span.offset, sizeof(id));
         CHECK(id == 5u); // the span is what makes a generic read possible
     }
     // A declared span that leaves the row is refused, never handed to a reader.
@@ -838,15 +838,15 @@ static void testPersistedIndex(void) {
     CHECK(store != nullptr && Store_isOpen(store));
     CHECK(db != nullptr && schema != nullptr);
     if (store != nullptr && db != nullptr && schema != nullptr) {
-        Struct_setSize(schema, (uint32_t) sizeof(Row));
+        Struct_setSize(schema, (u32) sizeof(Row));
         Field *idField = Field("id");
         Field *healthField = Field("health");
         CHECK(idField != nullptr && healthField != nullptr);
         if (idField != nullptr && healthField != nullptr) {
-            Field_setOffset(idField, (uint32_t) offsetof(Row, id));
-            Field_setSize(idField, (uint32_t) sizeof((*((Row*) nullptr)).id));
-            Field_setOffset(healthField, (uint32_t) offsetof(Row, health));
-            Field_setSize(healthField, (uint32_t) sizeof((*((Row*) nullptr)).health));
+            Field_setOffset(idField, (u32) offsetof(Row, id));
+            Field_setSize(idField, (u32) sizeof((*((Row*) nullptr)).id));
+            Field_setOffset(healthField, (u32) offsetof(Row, health));
+            Field_setSize(healthField, (u32) sizeof((*((Row*) nullptr)).health));
             Field_setFlags(healthField, REFLECT_FIELD_INDEXED);
             CHECK(Struct_add(schema, idField) == 0u);
             CHECK(Struct_add(schema, healthField) == 1u);
@@ -857,8 +857,8 @@ static void testPersistedIndex(void) {
             Field_free(healthField);
         CHECK(Database_define(db, schema) == 0);
         Row source[4] = {{1u, 40}, {2u, 10}, {3u, 30}, {4u, 20}};
-        for (uint32_t i = 0u; i < 4u; i++)
-            CHECK(Database_insertOwned(db, "scores", &source[i], sizeof(Row)) == (int32_t) i);
+        for (u32 i = 0u; i < 4u; i++)
+            CHECK(Database_insertOwned(db, "scores", &source[i], sizeof(Row)) == (i32) i);
         CHECK(Database_indexBuild(db, "scores", "health") == DATABASE_OK);
         CHECK(Database_saveStore(db, store) == DATABASE_OK);
     }
@@ -873,15 +873,15 @@ static void testPersistedIndex(void) {
     CHECK(store != nullptr && Store_isOpen(store));
     CHECK(db != nullptr && schema != nullptr);
     if (store != nullptr && db != nullptr && schema != nullptr) {
-        Struct_setSize(schema, (uint32_t) sizeof(Row));
+        Struct_setSize(schema, (u32) sizeof(Row));
         Field *idField = Field("id");
         Field *healthField = Field("health");
         CHECK(idField != nullptr && healthField != nullptr);
         if (idField != nullptr && healthField != nullptr) {
-            Field_setOffset(idField, (uint32_t) offsetof(Row, id));
-            Field_setSize(idField, (uint32_t) sizeof((*((Row*) nullptr)).id));
-            Field_setOffset(healthField, (uint32_t) offsetof(Row, health));
-            Field_setSize(healthField, (uint32_t) sizeof((*((Row*) nullptr)).health));
+            Field_setOffset(idField, (u32) offsetof(Row, id));
+            Field_setSize(idField, (u32) sizeof((*((Row*) nullptr)).id));
+            Field_setOffset(healthField, (u32) offsetof(Row, health));
+            Field_setSize(healthField, (u32) sizeof((*((Row*) nullptr)).health));
             Field_setFlags(healthField, REFLECT_FIELD_INDEXED);
             CHECK(Struct_add(schema, idField) == 0u);
             CHECK(Struct_add(schema, healthField) == 1u);
@@ -917,15 +917,15 @@ static void testPersistedIndex(void) {
     CHECK(store != nullptr && Store_isOpen(store));
     CHECK(db != nullptr && schema != nullptr);
     if (store != nullptr && db != nullptr && schema != nullptr) {
-        Struct_setSize(schema, (uint32_t) sizeof(Row));
+        Struct_setSize(schema, (u32) sizeof(Row));
         Field *idField = Field("id");
         Field *movedField = Field("health");
         CHECK(idField != nullptr && movedField != nullptr);
         if (idField != nullptr && movedField != nullptr) {
-            Field_setOffset(idField, (uint32_t) offsetof(Row, id));
-            Field_setSize(idField, (uint32_t) sizeof((*((Row*) nullptr)).id));
-            Field_setOffset(movedField, (uint32_t) offsetof(Row, id)); // moved
-            Field_setSize(movedField, (uint32_t) sizeof(int32_t));
+            Field_setOffset(idField, (u32) offsetof(Row, id));
+            Field_setSize(idField, (u32) sizeof((*((Row*) nullptr)).id));
+            Field_setOffset(movedField, (u32) offsetof(Row, id)); // moved
+            Field_setSize(movedField, (u32) sizeof(i32));
             Field_setFlags(movedField, REFLECT_FIELD_INDEXED);
             CHECK(Struct_add(schema, idField) == 0u);
             CHECK(Struct_add(schema, movedField) == 1u);

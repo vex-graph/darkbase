@@ -26,12 +26,12 @@
  */
 
 typedef struct TestSecretContext {
-    uint8_t secret[20];
+    u8 secret[20];
     bool present;
 } TestSecretContext;
 
-static uint32_t checks;
-static uint32_t failures;
+static u32 checks;
+static u32 failures;
 
 #define CHECK(value) do { \
     checks++; \
@@ -42,7 +42,7 @@ static uint32_t failures;
 } while (false)
 
 static bool secretStore(void *opaqueContext, const char *service,
-                        const char *account, const uint8_t *secret, size_t length) {
+                        const char *account, const u8 *secret, bytes length) {
     TestSecretContext *context = (TestSecretContext*) opaqueContext;
     if (context == nullptr || service == nullptr || account == nullptr || secret == nullptr ||
         length != sizeof (*context).secret)
@@ -53,8 +53,8 @@ static bool secretStore(void *opaqueContext, const char *service,
 }
 
 static bool secretLoad(void *opaqueContext, const char *service,
-                       const char *account, uint8_t *dest, size_t capacity,
-                       size_t *outLength) {
+                       const char *account, u8 *dest, bytes capacity,
+                       bytes *outLength) {
     TestSecretContext *context = (TestSecretContext*) opaqueContext;
     if (outLength != nullptr)
         *outLength = 0u;
@@ -76,7 +76,7 @@ static bool secretRemove(void *opaqueContext, const char *service,
     return true;
 }
 
-static uint32_t codeAt(const TestSecretContext *context, uint64_t seconds) {
+static u32 codeAt(const TestSecretContext *context, u64 seconds) {
     return Totp_code((*context).secret, sizeof (*context).secret, seconds,
                      TOTP_DIGITS_DEFAULT, TOTP_STEP_SECONDS_DEFAULT);
 }
@@ -111,8 +111,8 @@ int main(void) {
         return EXIT_FAILURE;
     char databasePath[256];
     int pathLength = snprintf(databasePath, sizeof databasePath, "%s/admin.vexdb", directory);
-    CHECK(pathLength > 0 && (size_t) pathLength < sizeof databasePath);
-    if (pathLength <= 0 || (size_t) pathLength >= sizeof databasePath)
+    CHECK(pathLength > 0 && (bytes) pathLength < sizeof databasePath);
+    if (pathLength <= 0 || (bytes) pathLength >= sizeof databasePath)
         return EXIT_FAILURE;
 
     TestSecretContext secrets = {0};
@@ -125,7 +125,7 @@ int main(void) {
     CHECK(HeadlessService_setPasswordIterations(service, PASSWORD_ITERATIONS_MIN));
     CHECK(HeadlessService_getPasswordIterations(service) == PASSWORD_ITERATIONS_MIN);
     char setupSecret[64];
-    size_t setupLength = 0u;
+    bytes setupLength = 0u;
     CHECK(!HeadlessService_start(service, nullptr, nullptr, nullptr, nullptr,
                                  setupSecret, sizeof setupSecret, &setupLength));
     CHECK(setupLength == 0u);
@@ -137,7 +137,7 @@ int main(void) {
     CHECK(!HeadlessService_isRequestAllowed(service));
     CHECK(!HeadlessService_setAcceptRequests(service, true));
 
-    uint64_t firstTime = 600u;
+    u64 firstTime = 600u;
     CHECK(HeadlessService_adminLoginAt(service, "not-admin", "Password123!",
                                        codeAt(&secrets, firstTime), firstTime) == false);
     CHECK(HeadlessService_adminLoginAt(service, "admin", "wrong-password",
@@ -146,7 +146,7 @@ int main(void) {
                                        codeAt(&secrets, firstTime), firstTime));
     CHECK(!HeadlessService_setAcceptRequests(service, true));
 
-    uint64_t nextTime = 630u;
+    u64 nextTime = 630u;
     CHECK(HeadlessService_changeAdminPasswordAt(service, "Password123!", "correct horse battery",
         codeAt(&secrets, nextTime), nextTime));
     CHECK(HeadlessService_setAcceptRequests(service, true));
@@ -168,7 +168,7 @@ int main(void) {
         CHECK(setupLength == 0u);
         CHECK(!HeadlessService_isRequestAllowed(service));
         CHECK(!HeadlessService_setAcceptRequests(service, true));
-        uint64_t laterTime = 660u;
+        u64 laterTime = 660u;
         CHECK(HeadlessService_adminLoginAt(service, "admin", "correct horse battery",
             codeAt(&secrets, laterTime), laterTime));
         CHECK(HeadlessService_setAcceptRequests(service, true));
@@ -177,7 +177,7 @@ int main(void) {
         int64_t nowMillis = DateTime_epochMillis(&now);
         CHECK(nowMillis >= 0);
         if (nowMillis >= 0) {
-            uint64_t nowSeconds = (uint64_t) nowMillis / 1000u;
+            u64 nowSeconds = (u64) nowMillis / 1000u;
             CHECK(HeadlessService_adminLogin(service, "admin", "correct horse battery",
                                               codeAt(&secrets, nowSeconds)));
             CHECK(!HeadlessService_changeAdminPassword(service, "correct horse battery",

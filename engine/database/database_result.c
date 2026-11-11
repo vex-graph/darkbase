@@ -38,9 +38,9 @@
  * ----------------------------------------------------------------------------
  *   DatabaseResult {
  *     ChunkedList *rows; // row-pointer list; ownership of container is explicit
- *     uint32_t count;    // published rows snapshot
- *     uint32_t cursor;   // next row index
- *     uint32_t ownsRows; // owns list container only, never row values
+ *     u32 count;    // published rows snapshot
+ *     u32 cursor;   // next row index
+ *     u32 ownsRows; // owns list container only, never row values
  *   }
  *
  * PRIVATE HELPERS (kept file-local, pure logic, no behavior of their own): none.
@@ -110,7 +110,7 @@ void DatabaseResult_free(DatabaseResult *self) {
 /**
  * Returns the allocation's runtime type id, or zero for a null result.
  */
-uint64_t DatabaseResult_kind(const DatabaseResult *self) {
+u64 DatabaseResult_kind(const DatabaseResult *self) {
     if (self == nullptr)
         return 0u;
     return Memory_type((void*) self);
@@ -119,7 +119,7 @@ uint64_t DatabaseResult_kind(const DatabaseResult *self) {
 /**
  * Reports whether a non-null result allocation has the requested type id.
  */
-bool DatabaseResult_check(const DatabaseResult *self, uint64_t typeId) {
+bool DatabaseResult_check(const DatabaseResult *self, u64 typeId) {
     if (self == nullptr)
         return false;
     return Memory_type((void*) self) == typeId;
@@ -133,10 +133,10 @@ bool DatabaseResult_check(const DatabaseResult *self, uint64_t typeId) {
 bool DatabaseResult_next(DatabaseResult *self, void **outRow) {
     if (self == nullptr || outRow == nullptr || (*self).rows == nullptr)
         return false;
-    uint32_t index = (*self).cursor;
+    u32 index = (*self).cursor;
     if (index >= (*self).count)
         return false;
-    uint8_t *slot = ChunkedList_slot((*self).rows, index);
+    u8 *slot = ChunkedList_slot((*self).rows, index);
     if (slot == nullptr)
         return false;
     (*self).cursor = index + 1u;
@@ -147,14 +147,14 @@ bool DatabaseResult_next(DatabaseResult *self, void **outRow) {
 /**
  * Returns the row count captured at construction, or zero for nullptr.
  */
-uint32_t DatabaseResult_count(const DatabaseResult *self) {
+u32 DatabaseResult_count(const DatabaseResult *self) {
     return self ? (*self).count : 0u;
 }
 
 /**
  * Returns the index of the next row to be read, or zero for nullptr.
  */
-uint32_t DatabaseResult_position(const DatabaseResult *self) {
+u32 DatabaseResult_position(const DatabaseResult *self) {
     return self ? (*self).cursor : 0u;
 }
 
@@ -172,7 +172,7 @@ void DatabaseResult_rewind(DatabaseResult *self) {
  * Formats a bounded cursor-position summary; null self formats as "nullptr"
  * and truncation is reported through outTruncated when supplied.
  */
-void DatabaseResult_toString(const DatabaseResult *self, char *dest, size_t cap, bool *outTruncated) {
+void DatabaseResult_toString(const DatabaseResult *self, char *dest, bytes cap, bool *outTruncated) {
     if (outTruncated)
         *outTruncated = false;
     if (dest == nullptr || cap == 0u)
@@ -182,7 +182,7 @@ void DatabaseResult_toString(const DatabaseResult *self, char *dest, size_t cap,
         return;
     }
     int written = snprintf(dest, cap, "DatabaseResult(%u/%u)", (*self).cursor, (*self).count);
-    if (written < 0 || (size_t) written >= cap) {
+    if (written < 0 || (bytes) written >= cap) {
         if (outTruncated)
             *outTruncated = true;
     }
@@ -192,7 +192,7 @@ void DatabaseResult_toString(const DatabaseResult *self, char *dest, size_t cap,
  * Formats the cursor's own fields into a bounded structure summary; null self
  * formats as "nullptr" and truncation is reported when possible.
  */
-void DatabaseResult_toStringStruct(const DatabaseResult *self, char *dest, size_t cap, bool *outTruncated) {
+void DatabaseResult_toStringStruct(const DatabaseResult *self, char *dest, bytes cap, bool *outTruncated) {
     if (outTruncated)
         *outTruncated = false;
     if (dest == nullptr || cap == 0u)
@@ -205,7 +205,7 @@ void DatabaseResult_toStringStruct(const DatabaseResult *self, char *dest, size_
         "DatabaseResult { rows=0x%llx, count=%u, cursor=%u, ownsRows=%u }",
         (unsigned long long) (uintptr_t) (*self).rows, (*self).count,
         (*self).cursor, (*self).ownsRows);
-    if (written < 0 || (size_t) written >= cap) {
+    if (written < 0 || (bytes) written >= cap) {
         if (outTruncated)
             *outTruncated = true;
     }

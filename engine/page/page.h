@@ -54,36 +54,36 @@ typedef enum PageKind {
 } PageKind;
 
 typedef struct Page {
-    uint8_t *bytes;      // borrowed page storage (PAGE size bytes)
-    uint32_t size;       // the store's page size, power of two
-    uint32_t id;         // this page's number within the file (sealed in)
-    uint32_t kind;       // PageKind
-    uint32_t used;       // in-use payload bytes (mirrors the header field)
-    int32_t lastCode;    // last PageCode refusal
+    u8 *bytes;      // borrowed page storage (PAGE size bytes)
+    u32 size;       // the store's page size, power of two
+    u32 id;         // this page's number within the file (sealed in)
+    u32 kind;       // PageKind
+    u32 used;       // in-use payload bytes (mirrors the header field)
+    i32 lastCode;    // last PageCode refusal
     bool sealed;         // the seal field is valid
     bool dirty;          // the caller has changed bytes since the last seal
 } Page;
 
 // Is this a legal page size for a store to choose?
-bool Page_sizeValid(uint32_t size);
+bool Page_sizeValid(u32 size);
 
 // Arity constructors: Page_0 has no storage; Page_2 binds borrowed storage of
 // `size` bytes without changing them or admitting their header. Null on refusal.
 // The caller retains the full live buffer and externally serializes all access.
 Page *Page_0(void);
-Page *Page_2(uint8_t *bytes, uint32_t size);
+Page *Page_2(u8 *bytes, u32 size);
 #define Page(...) CONSTRUCTOR_DISPATCH(Page, __VA_ARGS__)
 #define Page_zero() Page_0()
 
 void Page_free(Page *self);
 
 // Start a page in place: zero it, write its header, clear the payload. Unsealed.
-PageCode Page_format(Page *self, uint32_t id, uint32_t kind);
+PageCode Page_format(Page *self, u32 id, u32 kind);
 // Reuse a page: same id, new kind, payload cleared, unsealed.
-PageCode Page_reset(Page *self, uint32_t kind);
+PageCode Page_reset(Page *self, u32 kind);
 // Append payload bytes. Refuses with PAGE_FULL when they do not fit, and in that
 // case appends NOTHING — there is no partial append.
-PageCode Page_append(Page *self, const uint8_t *src, uint32_t length);
+PageCode Page_append(Page *self, const u8 *src, u32 length);
 // Store the seal. A sealed page is immutable until it is reset.
 PageCode Page_seal(Page *self);
 // Cold byte verification, independent of cached id/kind/used/sealed/dirty. INVALID
@@ -97,23 +97,23 @@ PageCode Page_verify(const Page *self);
 PageCode Page_load(Page *self);
 
 PageCode    Page_code(const Page *self);
-uint8_t    *Page_payload(Page *self);           // borrowed, Page_used bytes long
-const uint8_t *Page_payloadOf(const Page *self);
-uint32_t    Page_used(const Page *self);
-uint32_t    Page_capacity(const Page *self);    // size minus the header
-uint32_t    Page_freeSpace(const Page *self);
-uint32_t    Page_id(const Page *self);
-uint32_t    Page_kind(const Page *self);
-uint32_t    Page_size(const Page *self);
-uint32_t    Page_sealValue(const Page *self);   // 0 while unsealed
+u8    *Page_payload(Page *self);           // borrowed, Page_used bytes long
+const u8 *Page_payloadOf(const Page *self);
+u32    Page_used(const Page *self);
+u32    Page_capacity(const Page *self);    // size minus the header
+u32    Page_freeSpace(const Page *self);
+u32    Page_id(const Page *self);
+u32    Page_kind(const Page *self);
+u32    Page_size(const Page *self);
+u32    Page_sealValue(const Page *self);   // 0 while unsealed
 bool        Page_isSealed(const Page *self);
 bool        Page_isDirty(const Page *self);
 void        Page_markClean(Page *self);         // the caller flushed it
 
 const char *Page_codeName(PageCode code);
-const char *Page_kindName(uint32_t kind);
+const char *Page_kindName(u32 kind);
 
-bool Page_toString(const Page *self, char *dest, size_t capacity, bool *outTruncated);
-bool Page_toStringStruct(const Page *self, char *dest, size_t capacity, bool *outTruncated);
+bool Page_toString(const Page *self, char *dest, bytes capacity, bool *outTruncated);
+bool Page_toStringStruct(const Page *self, char *dest, bytes capacity, bool *outTruncated);
 
 #endif
