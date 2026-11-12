@@ -9,10 +9,10 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-#include "engine/oop/type.h"
+#include "engine/oop/darkbase_type.h"
 #include "database/database.h"
 #include "nio/mem.h"
-#include "engine/oop/type.h"
+#include "engine/oop/darkbase_type.h"
 #include "reflection/field.h"
 #include "reflection/struct.h"
 #include "store/store.h"
@@ -71,7 +71,7 @@ static void crashAtDatabaseRoot(void *context, unsigned phase) {
     } while (0)
 
 typedef struct Row {
-    uintptr_t id;
+    pointer id;
     i32 health;
 } Row;
 
@@ -566,7 +566,7 @@ static void testPageStorePersistence(void) {
             CHECK(row != nullptr && (*row).id == source[i].id &&
                   (*row).health == source[i].health); // rejected replacement preserved old root
         }
-        uintptr_t wanted = 42u;
+        pointer wanted = 42u;
         DatabaseResult *query = Database_queryEqual(db, "player", "id",
                                                      &wanted, sizeof(wanted));
         CHECK(query != nullptr && DatabaseResult_count(query) == 1u);
@@ -688,7 +688,7 @@ static void testStructuredEqualityQuery(void) {
     for (u32 i = 0u; i < 6u; i++)
         CHECK(Database_insertOwned(db, "player", &source[i], sizeof(Row)) == (i32) i);
 
-    uintptr_t wanted = 5u;
+    pointer wanted = 5u;
     DatabaseResult *matches = Database_queryEqual(db, "player", "id",
                                                    &wanted, sizeof(wanted));
     CHECK(matches != nullptr && DatabaseResult_count(matches) == 2u);
@@ -701,7 +701,7 @@ static void testStructuredEqualityQuery(void) {
         CHECK(DatabaseResult_next(matches, &first) == false);
         DatabaseResult_free(matches);
     }
-    uintptr_t absent = 101u;
+    pointer absent = 101u;
     matches = Database_queryEqual(db, "player", "id", &absent, sizeof(absent));
     CHECK(matches != nullptr && DatabaseResult_count(matches) == 0u);
     DatabaseResult_free(matches);

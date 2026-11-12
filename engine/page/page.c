@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "annotation/annotation.h"
-#include "oop/type.h"
+#include "oop/darkbase_type.h"
 #include "exception/throw.h"
 #include "nio/mem.h"
 #include "util/crc32.h"

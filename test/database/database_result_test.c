@@ -6,11 +6,11 @@
 #include <string.h>
 #include <stdint.h>
 
-#include "engine/oop/type.h"
+#include "engine/oop/darkbase_type.h"
 #include "database/database.h"
 #include "database/database_result.h"
 #include "nio/mem.h"
-#include "engine/oop/type.h"
+#include "engine/oop/darkbase_type.h"
 #include "reflection/struct.h"
 #include "struct/chunked_list.h"
 #include "test_support.h"
@@ -62,9 +62,9 @@ static void testEmptyCursor(void) {
     CHECK(DatabaseResult_count(r) == 0u);
     CHECK(DatabaseResult_position(r) == 0u);
 
-    void *row = (void*) (uintptr_t) 1u;
+    void *row = (void*) (pointer) 1u;
     CHECK(DatabaseResult_next(r, &row) == false);
-    CHECK(row == (void*) (uintptr_t) 1u); // untouched on false
+    CHECK(row == (void*) (pointer) 1u); // untouched on false
     CHECK(DatabaseResult_next(r, nullptr) == false);
     CHECK(DatabaseResult_next(nullptr, &row) == false);
 
@@ -115,9 +115,9 @@ static void testWalk(void) {
         CHECK((*((Row2*) got)).v == i * 10u);
     }
     CHECK(DatabaseResult_position(r) == 8u);
-    void *past = (void*) (uintptr_t) 2u;
+    void *past = (void*) (pointer) 2u;
     CHECK(DatabaseResult_next(r, &past) == false);
-    CHECK(past == (void*) (uintptr_t) 2u);
+    CHECK(past == (void*) (pointer) 2u);
 
     // Rewind replays the same rows.
     DatabaseResult_rewind(r);

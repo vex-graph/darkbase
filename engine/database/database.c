@@ -8,11 +8,11 @@
 #include <unistd.h>
 
 #include "annotation/annotation.h"
-#include "oop/type.h"
+#include "oop/darkbase_type.h"
 #include "exception/throw.h"
 #include "io/file.h"
 #include "nio/mem.h"
-#include "oop/type.h"
+#include "oop/darkbase_type.h"
 #include "reflection/struct.h"
 #include "relational/variable_slot.h"
 #include "store/store.h"
@@ -2259,7 +2259,7 @@ void Database_toStringStruct(const Database *self, char *dest, bytes cap, bool *
         return;
     }
     int written = snprintf(dest, cap, "Database { entities=0x%llx, entityCount=%u, chunkBytes=%u, lastCode=%d }",
-                           (unsigned long long) (uintptr_t) (*self).entities, Database_entityCount(self),
+                           (unsigned long long) (pointer) (*self).entities, Database_entityCount(self),
                            (*self).chunkBytes, (*self).lastCode);
     if (written < 0 || (bytes) written >= cap) {
         if (outTruncated)

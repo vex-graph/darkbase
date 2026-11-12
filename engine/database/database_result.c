@@ -5,10 +5,10 @@
 #include <stdio.h>
 
 #include "annotation/annotation.h"
-#include "oop/type.h"
+#include "oop/darkbase_type.h"
 #include "exception/throw.h"
 #include "nio/mem.h"
-#include "oop/type.h"
+#include "oop/darkbase_type.h"
 
 ;;DEFINITION
 /**
@@ -203,7 +203,7 @@ void DatabaseResult_toStringStruct(const DatabaseResult *self, char *dest, bytes
     }
     int written = snprintf(dest, cap,
         "DatabaseResult { rows=0x%llx, count=%u, cursor=%u, ownsRows=%u }",
-        (unsigned long long) (uintptr_t) (*self).rows, (*self).count,
+        (unsigned long long) (pointer) (*self).rows, (*self).count,
         (*self).cursor, (*self).ownsRows);
     if (written < 0 || (bytes) written >= cap) {
         if (outTruncated)

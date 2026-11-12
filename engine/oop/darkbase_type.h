@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include "type/type.h"
+#include "type/re_type.h"
 
 // oop/type.h — the darkbase-engine class registry (the One Type Registry Law).
 //

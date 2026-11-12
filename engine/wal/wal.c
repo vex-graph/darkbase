@@ -9,7 +9,7 @@
 #include <unistd.h>
 #endif
 #include "annotation/annotation.h"
-#include "oop/type.h"
+#include "oop/darkbase_type.h"
 #include "exception/throw.h"
 #include "io/file.h"
 #include "nio/mem.h"
