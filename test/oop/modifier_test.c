@@ -1,6 +1,6 @@
 // Owner: oop/modifier.c — the frozen field-modifier keyword set.
 //
-// Proves the three axes validate, the 80 declaration presets and the short
+// Proves the three axes validate, the 80 declaration presets and the i16
 // forms agree with the orthogonal constructor, the terminal parser accepts the
 // same words the C schema uses (free order, defaults by absence) and rejects
 // unknown/duplicate/overlong input with exactly one cold diagnostic, and both
@@ -25,7 +25,7 @@ static bytes captureProbe(ModifierProbe probe, char *out, bytes cap) {
     FILE *capture = tmpfile();
     assert(capture != nullptr);
     assert(fflush(stderr) == 0);
-    int saved = dup(STDERR_FILENO);
+    i32 saved = dup(STDERR_FILENO);
     assert(saved >= 0 && dup2(fileno(capture), STDERR_FILENO) >= 0);
     (discard) probe();
     assert(fflush(stderr) == 0);
@@ -73,7 +73,7 @@ static fn checkQuiet(ModifierProbe probe) {
     assert(n == 0u);
 }
 
-int main() {
+i32 main() {
     // --- Defaults and constructors -----------------------------------------
     Modifier def = Modifier_0();
     assert(Modifier_equals(def, MODIFIER_DEFAULT));
@@ -94,7 +94,7 @@ int main() {
     assert(Modifier_isTransient(five) && Modifier_isShared(five));
     assert(Modifier_isAdmissible(five));
 
-    // --- Presets: full and short forms agree -------------------------------
+    // --- Presets: full and i16 forms agree -------------------------------
     assert(Modifier_equals(MODIFIER_PUBLIC_HASHED, MODIFIER_PUBLIC_HASHED_NULLABLE));
     assert(Modifier_equals(MODIFIER_PUBLIC_HASHED, three));
     assert(Modifier_equals(MODIFIER_PUBLIC_SERVER_SEALED_NONNULL_TRANSIENT_STATIC, five));

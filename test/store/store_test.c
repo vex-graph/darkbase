@@ -24,13 +24,13 @@
 #define TEST_RESERVATION 131072u
 #define TEST_LIVE_PAGES 48u
 static char directory[1024];
-static unsigned fixtureId;
+static u32 fixtureId;
 
 #ifdef STORE_FAULT_TESTS
 // Compile-time substitution ONLY in Store's test object. The real production
 // source contains no fault switch; these wrappers delegate to the actual R2/Wal
 // functions except for the one explicitly armed next failure.
-static unsigned fault;
+static u32 fault;
 u32 StoreTest_mapWrite(ReGrowableMappedFile *owner, bytes offset, const u8 *src, bytes length) {
     if (fault == 1u) { fault = 0u; return 2u; }
     return re_gmap_write(owner, offset, src, length);
@@ -54,7 +54,7 @@ WalCode StoreTest_walSync(Wal *owner) {
 #endif
 
 static fn fixture(char path[1024]) {
-    int n = snprintf(path, 1024u, "%s/store-%u.vexdb", directory, ++fixtureId);
+    i32 n = snprintf(path, 1024u, "%s/store-%u.vexdb", directory, ++fixtureId);
     assert(n > 0 && n < 1024);
 }
 
@@ -69,10 +69,10 @@ static fn readEquals(Store *store, u32 id, const u8 *expected, u32 length) {
     assert(bytes[length] == 0xCC);
 }
 
-static fn crashObserver(any context, unsigned phase) {
-    unsigned *selected = (unsigned*) context;
+static fn crashObserver(any context, u32 phase) {
+    u32 *selected = (u32*) context;
     if (phase == *selected)
-        _exit(100 + (int) phase);
+        _exit(100 + (i32) phase);
 }
 
 static fn lifecycle() {
@@ -202,7 +202,7 @@ static fn boundedResources() {
     assert(unlink(path) == 0);
 }
 
-static fn interruptedCommit(unsigned phase) {
+static fn interruptedCommit(u32 phase) {
     char path[1024];
     fixture(path);
     Store *store = Store_4(path, TEST_RESERVATION, TEST_PAGE, TEST_JOURNAL);
@@ -220,9 +220,9 @@ static fn interruptedCommit(unsigned phase) {
         (discard) Store_page_write(writer, id, PAGE_KIND_LEAF, (const u8*) "durable-redo", 12u);
         _exit(9); // must not return from the selected actual commit boundary
     }
-    int status = 0;
+    i32 status = 0;
     assert(waitpid(child, &status, 0) == child && WIFEXITED(status));
-    assert(WEXITSTATUS(status) == 100 + (int) phase);
+    assert(WEXITSTATUS(status) == 100 + (i32) phase);
     // Additionally destroy the target data frame after the child's durable redo:
     // recovery must repair a torn page, not merely adopt a lucky page-cache write.
     FILE *raw = fopen(path, "r+b.sh");
@@ -270,7 +270,7 @@ static fn invalidAdmission() {
     bool cut = true;
     assert(Store_toString(nullptr, text, sizeof text, &cut) && !cut && strcmp(text, "nullptr") == 0);
     assert(Store_toStringStruct(nullptr, text, sizeof text, &cut) && strcmp(text, "nullptr") == 0);
-    for (int i = STORE_OK; i <= STORE_TRUNCATED; ++i)
+    for (i32 i = STORE_OK; i <= STORE_TRUNCATED; ++i)
         assert(strcmp(Store_codeName((StoreCode) i), "unknown") != 0);
     assert(strcmp(Store_codeName((StoreCode) 99), "unknown") == 0);
     // Bootstrap damage fails closed instead of admitting a guessed geometry.
@@ -318,7 +318,7 @@ static fn forgedBaseline() {
 
 #ifdef STORE_FAULT_TESTS
 static fn uncertainIO() {
-    for (unsigned stage = 1u; stage <= 5u; ++stage) {
+    for (u32 stage = 1u; stage <= 5u; ++stage) {
         char path[1024];
         fixture(path);
         Store *store = Store_4(path, TEST_RESERVATION, TEST_PAGE, TEST_JOURNAL);
@@ -347,11 +347,11 @@ static fn uncertainIO() {
 }
 #endif
 
-int main(int argc, char **argv) {
+i32 main(i32 argc, char **argv) {
     bool leakSafe = argc == 2 && strcmp(argv[1], "--leak-safe") == 0;
     assert(argc == 1 || leakSafe);
     const char *tmp = getenv("TMPDIR");
-    int n = snprintf(directory, sizeof directory, "%s/store-owner-XXXXXX", tmp != nullptr ? tmp : "/tmp");
+    i32 n = snprintf(directory, sizeof directory, "%s/store-owner-XXXXXX", tmp != nullptr ? tmp : "/tmp");
     assert(n > 0 && (bytes) n < sizeof directory && mkdtemp(directory) != nullptr);
     invalidAdmission();
     lifecycle();
@@ -364,7 +364,7 @@ int main(int argc, char **argv) {
     // only that separate instrumentation invocation excludes these child cases.
     // Normal and sanitizer owner invocations ALWAYS execute all three boundaries.
     if (!leakSafe)
-        for (unsigned phase = STORE_AFTER_LOG_SYNC; phase <= STORE_AFTER_DATA_SYNC; ++phase)
+        for (u32 phase = STORE_AFTER_LOG_SYNC; phase <= STORE_AFTER_DATA_SYNC; ++phase)
             interruptedCommit(phase);
     assert(rmdir(directory) == 0); // one database file, no sidecar artifacts
     Memory_freeAll();

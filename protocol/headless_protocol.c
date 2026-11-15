@@ -86,7 +86,7 @@ static fn write16(u16 value, u8 *p) {
 }
 
 static fn write32(u32 value, u8 *p) {
-    for (unsigned i = 0u; i < 4u; ++i)
+    for (u32 i = 0u; i < 4u; ++i)
         p[i] = (u8) (value >> (i * 8u));
 }
 
@@ -300,18 +300,18 @@ static bool project(const HeadlessProtocol *self, bool structure, char *dest,
             *outTruncated = true;
         return false;
     }
-    int length;
+    i32 length;
     if (self == nullptr)
         length = snprintf(dest, capacity, "nullptr");
     else if (structure)
         length = snprintf(dest, capacity,
             "HeadlessProtocol{buffer:<redacted>,capacity:%zu,used:%zu,expected:%zu,exhaustionCount:%llu,code:%u,ready:%u,failed:%u}",
             (*self).capacity, (*self).used, (*self).expected,
-            (unsigned long long) (*self).exhaustionCount, (*self).code,
-            (unsigned) (*self).ready, (unsigned) (*self).failed);
+            (u64) (*self).exhaustionCount, (*self).code,
+            (u32) (*self).ready, (u32) (*self).failed);
     else
         length = snprintf(dest, capacity, "HeadlessProtocol{ready:%u,failed:%u}",
-                           (unsigned) (*self).ready, (unsigned) (*self).failed);
+                           (u32) (*self).ready, (u32) (*self).failed);
     bool complete = length >= 0 && (bytes) length < capacity;
     if (outTruncated != nullptr)
         *outTruncated = !complete;

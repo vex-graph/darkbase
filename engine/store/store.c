@@ -279,7 +279,7 @@ Store *Store_1(const char *path) {
         reject(nullptr, STORE_IO, "bootstrap file could not be opened");
         return nullptr;
     }
-    int64_t n = File_read(file, prefix, sizeof prefix);
+    i64 n = File_read(file, prefix, sizeof prefix);
     bool closed = File_close(file);
     if (!closed || n != sizeof prefix || memcmp(prefix + PAGE_HEADER_BYTES, storeMagic, sizeof storeMagic) != 0) {
         reject(nullptr, STORE_CORRUPT, "bootstrap absent or malformed");
@@ -334,7 +334,7 @@ failure:
     return nullptr;
 }
 
-static fn observe(Store *self, unsigned phase) {
+static fn observe(Store *self, u32 phase) {
     if ((*self).observer != nullptr)
         (*self).observer((*self).observerContext, phase);
 }
@@ -511,12 +511,12 @@ static bool project(const Store *self, bool structure, char *dest, bytes capacit
             *outTruncated = true;
         return false;
     }
-    int n;
+    i32 n;
     if (self == nullptr)
         n = snprintf(dest, capacity, "nullptr");
     else if (!structure)
         n = snprintf(dest, capacity, "Store(open=%d,pages=%u,sequence=%llu,blocked=%d)",
-            (*self).open, (*self).pageCount, (unsigned long long) (*self).sequence, (*self).blocked);
+            (*self).open, (*self).pageCount, (u64) (*self).sequence, (*self).blocked);
     else
         n = snprintf(dest, capacity,
             "Store{mapping=%s,wal=%s,page=%s,scratch=%s,redo=%s,reserved=%zu,journalBytes=%zu,"
@@ -526,7 +526,7 @@ static bool project(const Store *self, bool structure, char *dest, bytes capacit
             (*self).page ? "scratch" : "nullptr", (*self).scratch ? "owned" : "nullptr",
             (*self).redo ? "owned" : "nullptr", (*self).reserved, (*self).journalBytes,
             (*self).dataOffset, (*self).pageSize, (*self).pageCount, (*self).freeHead,
-            (unsigned long long) (*self).sequence, (unsigned long long) (*self).refusals,
+            (u64) (*self).sequence, (u64) (*self).refusals,
             Store_codeName((*self).code), (*self).open, (*self).blocked, (*self).observer ? "set" : "nullptr");
     bool cut = n < 0 || (bytes) n >= capacity;
     if (outTruncated != nullptr)

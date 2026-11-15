@@ -28,14 +28,14 @@
 //   main — runs each independent cold-admission scenario and removes all fixtures
 
 static char directory[1024];
-static unsigned fixtureId;
+static u32 fixtureId;
 
 static fn fixture(char path[1024]) {
-    int n = snprintf(path, 1024u, "%s/store-adversarial-%u.vexdb", directory, ++fixtureId);
+    i32 n = snprintf(path, 1024u, "%s/store-adversarial-%u.vexdb", directory, ++fixtureId);
     assert(n > 0 && n < 1024);
 }
 
-static fn writeAt(const char *path, long offset, const_any data, bytes length) {
+static fn writeAt(const char *path, i64 offset, const_any data, bytes length) {
     FILE *file = fopen(path, "r+b.sh");
     assert(file != nullptr);
     assert(fseek(file, offset, SEEK_SET) == 0);
@@ -44,7 +44,7 @@ static fn writeAt(const char *path, long offset, const_any data, bytes length) {
     assert(fclose(file) == 0);
 }
 
-static fn readAt(const char *path, long offset, any data, bytes length) {
+static fn readAt(const char *path, i64 offset, any data, bytes length) {
     FILE *file = fopen(path, "rb");
     assert(file != nullptr);
     assert(fseek(file, offset, SEEK_SET) == 0);
@@ -70,8 +70,8 @@ static fn committedWalLengthMutation() {
 
     // V3 layout: region header, leading commit marker, 20-byte record prefix,
     // payload, CRC. Alter a committed record's length while leaving its marker.
-    const long lengthOffset = (long) TEST_PAGE + (long) WAL_HEADER_BYTES +
-                              (long) WAL_COMMIT_BYTES + 16L;
+    const i64 lengthOffset = (i64) TEST_PAGE + (i64) WAL_HEADER_BYTES +
+                              (i64) WAL_COMMIT_BYTES + 16L;
     u32 recordedLength = 0u;
     readAt(path, lengthOffset, &recordedLength, sizeof recordedLength);
     assert(recordedLength == STORE_REDO_BYTES + TEST_PAGE);
@@ -95,7 +95,7 @@ static fn livePageDamageAndRecovery() {
     // Deliberately simulate backing-store damage through a test-owned file handle.
     // No concurrent actor is present; this is an adversarial corruption probe outside
     // the Store's stable-file precondition, not a hostile-writer safety claim.
-    long dataOffset = (long) TEST_PAGE + (long) TEST_JOURNAL + (long) PAGE_HEADER_BYTES;
+    i64 dataOffset = (i64) TEST_PAGE + (i64) TEST_JOURNAL + (i64) PAGE_HEADER_BYTES;
     u8 damaged = (u8) (original[0] ^ 0x5Au);
     writeAt(path, dataOffset, &damaged, sizeof damaged);
 
@@ -181,7 +181,7 @@ static fn malformedBootstrapAdmission() {
     // Corrupt an unused bootstrap payload byte without resealing the page. The
     // bootstrap checksum covers only its header and used bytes, including this byte.
     u8 nonzero = 1u;
-    writeAt(path, (long) PAGE_HEADER_BYTES + 40L, &nonzero, sizeof nonzero);
+    writeAt(path, (i64) PAGE_HEADER_BYTES + 40L, &nonzero, sizeof nonzero);
     assert(Store_1(path) == nullptr);
     assert(unlink(path) == 0);
 
@@ -208,9 +208,9 @@ static fn malformedBootstrapAdmission() {
     assert(unlink(path) == 0);
 }
 
-int main() {
+i32 main() {
     const char *tmp = getenv("TMPDIR");
-    int n = snprintf(directory, sizeof directory, "%s/store-adversarial-XXXXXX",
+    i32 n = snprintf(directory, sizeof directory, "%s/store-adversarial-XXXXXX",
                      tmp != nullptr ? tmp : "/tmp");
     assert(n > 0 && (bytes) n < sizeof directory && mkdtemp(directory) != nullptr);
     committedWalLengthMutation();

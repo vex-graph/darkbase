@@ -155,7 +155,7 @@ DatabaseCatalogEntry Database_storeCatalogEntry(Store *store, u32 index);
 // --- Diagnostics ---
 i32 Database_errorCode(const Database *self);
 // Bounded copy of the last error message (dest-last); returns length or -1.
-int Database_lastError(const Database *self, char *out, bytes outCap);
+i32 Database_lastError(const Database *self, char *out, bytes outCap);
 // Static text for a DATABASE_* code (never null).
 const char *Database_errorText(i32 code);
 

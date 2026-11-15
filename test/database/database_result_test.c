@@ -32,8 +32,8 @@
  * ============================================================================
  */
 
-static int g_fail = 0;
-static int g_checks = 0;
+static i32 g_fail = 0;
+static i32 g_checks = 0;
 
 #define CHECK(cond)                                                       \
     do {                                                                  \
@@ -183,7 +183,7 @@ static fn testStrings() {
     DatabaseResult_free(r);
 }
 
-int main() {
+i32 main() {
     printf("=== DatabaseResult Test Suite ===\n\n");
 
     testEmptyCursor();

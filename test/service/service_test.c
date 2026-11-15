@@ -80,7 +80,7 @@ static u32 codeAt(const TestSecretContext *context, u64 seconds) {
                      TOTP_DIGITS_DEFAULT, TOTP_STEP_SECONDS_DEFAULT);
 }
 
-int main() {
+i32 main() {
     CHECK(HeadlessService_getPasswordIterations(nullptr) == 0u);
     CHECK(!HeadlessService_setPasswordIterations(nullptr, PASSWORD_ITERATIONS_MIN));
     HeadlessService *emptyService = HeadlessService();
@@ -109,7 +109,7 @@ int main() {
     if (failures != 0u)
         return EXIT_FAILURE;
     char databasePath[256];
-    int pathLength = snprintf(databasePath, sizeof databasePath, "%s/admin.vexdb", directory);
+    i32 pathLength = snprintf(databasePath, sizeof databasePath, "%s/admin.vexdb", directory);
     CHECK(pathLength > 0 && (bytes) pathLength < sizeof databasePath);
     if (pathLength <= 0 || (bytes) pathLength >= sizeof databasePath)
         return EXIT_FAILURE;
@@ -173,7 +173,7 @@ int main() {
         CHECK(HeadlessService_setAcceptRequests(service, true));
         DateTime now = {0};
         DateTime_set(&now);
-        int64_t nowMillis = DateTime_epochMillis(&now);
+        i64 nowMillis = DateTime_epochMillis(&now);
         CHECK(nowMillis >= 0);
         if (nowMillis >= 0) {
             u64 nowSeconds = (u64) nowMillis / 1000u;

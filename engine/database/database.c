@@ -122,8 +122,8 @@
  *     one persisted index record: the key and the row position carrying it.
  *
  * PRIVATE HELPERS (persistence, pure logic):
- *   writeAll(file, src, length)             // short-write-safe (static)
- *   readAll(file, dest, length)             // short-read-safe (static)
+ *   writeAll(file, src, length)             // i16-write-safe (static)
+ *   readAll(file, dest, length)             // i16-read-safe (static)
  *   syncFile(file)                          // sync mapped file data (static)
  *   loadPayload(self, bytes, len, count)         // validate snapshot records (static)
  *   loadCommit(self, bytes, len, count)          // stage rows then publish atomically (static)
@@ -1089,14 +1089,14 @@ i32 Database_errorCode(const Database *self) {
  * Copies the last error text into a bounded destination and returns copied
  * bytes, or -1 for invalid arguments; truncation is NUL-terminated.
  */
-int Database_lastError(const Database *self, char *out, bytes outCap) {
+i32 Database_lastError(const Database *self, char *out, bytes outCap) {
     if (self == nullptr || out == nullptr || outCap == 0u)
         return -1;
     bytes len = strlen((*self).lastError);
     bytes copy = len < outCap - 1u ? len : outCap - 1u;
     memcpy(out, (*self).lastError, copy);
     out[copy] = '\0';
-    return (int) copy;
+    return (i32) copy;
 }
 
 /**
@@ -1206,14 +1206,14 @@ _Static_assert(sizeof(DatabaseStoreIndexRecord) == 8u,
 #define DATABASE_STORE_CATALOG_MAGIC "DBCAT001"
 
 /**
- * Writes the full byte span, retrying short writes; returns false on a
+ * Writes the full byte span, retrying i16 writes; returns false on a
  * non-progressing or failed write.
  */
 static bool writeAll(File *file, const_any src, bytes length) {
     const u8 *p = (const u8*) src;
     bytes done = 0u;
     while (done < length) {
-        int64_t n = File_write(file, p + done, (int64_t) (length - done));
+        i64 n = File_write(file, p + done, (i64) (length - done));
         if (n <= 0)
             return false;
         done += (bytes) n;
@@ -1222,14 +1222,14 @@ static bool writeAll(File *file, const_any src, bytes length) {
 }
 
 /**
- * Reads the requested byte span, retrying short reads; returns false on EOF or
+ * Reads the requested byte span, retrying i16 reads; returns false on EOF or
  * a failed read before completion.
  */
 static bool readAll(File *file, any dest, bytes length) {
     u8 *p = (u8*) dest;
     bytes done = 0u;
     while (done < length) {
-        int64_t n = File_read(file, p + done, (int64_t) (length - done));
+        i64 n = File_read(file, p + done, (i64) (length - done));
         if (n <= 0)
             return false;
         done += (bytes) n;
@@ -1436,7 +1436,7 @@ i32 Database_save(Database *self, const char *path) {
     // over the destination. A failed or interrupted write leaves the previous
     // snapshot intact; the destination is only ever the old or the new file.
     char tmp[FILE_PATH_MAX + 32];
-    int tmpLen = snprintf(tmp, sizeof(tmp), "%s.%ld.tmp", path, (long) getpid());
+    i32 tmpLen = snprintf(tmp, sizeof(tmp), "%s.%ld.tmp", path, (i64) getpid());
     if (tmpLen < 0 || (bytes) tmpLen >= sizeof(tmp)) {
         recordError(self, DATABASE_INVALID, "save: path too long");
         THROW("Database_save: path too long");
@@ -1525,9 +1525,9 @@ i32 Database_load(Database *self, const char *path) {
         THROW("Database_load: bad header");
         return DATABASE_INVALID;
     }
-    int64_t size = File_size(file);
-    int64_t payloadLen = size - (int64_t) VEX_DB_HEADER_BYTES - (int64_t) VEX_DB_TRAILER_BYTES;
-    if (size < (int64_t) (VEX_DB_HEADER_BYTES + VEX_DB_TRAILER_BYTES) || payloadLen < 0) {
+    i64 size = File_size(file);
+    i64 payloadLen = size - (i64) VEX_DB_HEADER_BYTES - (i64) VEX_DB_TRAILER_BYTES;
+    if (size < (i64) (VEX_DB_HEADER_BYTES + VEX_DB_TRAILER_BYTES) || payloadLen < 0) {
         File_close(file);
         recordError(self, DATABASE_INVALID, "load: truncated file");
         THROW("Database_load: truncated file");
@@ -2237,7 +2237,7 @@ fn Database_toString(const Database *self, char *dest, bytes cap, bool *outTrunc
         snprintf(dest, cap, "nullptr");
         return;
     }
-    int written = snprintf(dest, cap, "Database(entities=%u)", Database_entityCount(self));
+    i32 written = snprintf(dest, cap, "Database(entities=%u)", Database_entityCount(self));
     if (written < 0 || (bytes) written >= cap) {
         if (outTruncated)
             *outTruncated = true;
@@ -2257,8 +2257,8 @@ fn Database_toStringStruct(const Database *self, char *dest, bytes cap, bool *ou
         snprintf(dest, cap, "nullptr");
         return;
     }
-    int written = snprintf(dest, cap, "Database { entities=0x%llx, entityCount=%u, chunkBytes=%u, lastCode=%d }",
-                           (unsigned long long) (pointer) (*self).entities, Database_entityCount(self),
+    i32 written = snprintf(dest, cap, "Database { entities=0x%llx, entityCount=%u, chunkBytes=%u, lastCode=%d }",
+                           (u64) (pointer) (*self).entities, Database_entityCount(self),
                            (*self).chunkBytes, (*self).lastCode);
     if (written < 0 || (bytes) written >= cap) {
         if (outTruncated)

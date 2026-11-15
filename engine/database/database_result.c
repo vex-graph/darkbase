@@ -180,7 +180,7 @@ fn DatabaseResult_toString(const DatabaseResult *self, char *dest, bytes cap, bo
         snprintf(dest, cap, "nullptr");
         return;
     }
-    int written = snprintf(dest, cap, "DatabaseResult(%u/%u)", (*self).cursor, (*self).count);
+    i32 written = snprintf(dest, cap, "DatabaseResult(%u/%u)", (*self).cursor, (*self).count);
     if (written < 0 || (bytes) written >= cap) {
         if (outTruncated)
             *outTruncated = true;
@@ -200,9 +200,9 @@ fn DatabaseResult_toStringStruct(const DatabaseResult *self, char *dest, bytes c
         snprintf(dest, cap, "nullptr");
         return;
     }
-    int written = snprintf(dest, cap,
+    i32 written = snprintf(dest, cap,
         "DatabaseResult { rows=0x%llx, count=%u, cursor=%u, ownsRows=%u }",
-        (unsigned long long) (pointer) (*self).rows, (*self).count,
+        (u64) (pointer) (*self).rows, (*self).count,
         (*self).cursor, (*self).ownsRows);
     if (written < 0 || (bytes) written >= cap) {
         if (outTruncated)

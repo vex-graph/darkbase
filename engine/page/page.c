@@ -358,7 +358,7 @@ bool Page_toString(const Page *self, char *dest, bytes capacity, bool *outTrunca
 
     if (self == nullptr)
         return writeNull(dest, capacity, outTruncated);
-    int written = snprintf(dest, capacity, "Page(id=%u, kind=%s, used=%u/%u, sealed=%d)",
+    i32 written = snprintf(dest, capacity, "Page(id=%u, kind=%s, used=%u/%u, sealed=%d)",
                            Page_id(self), Page_kindName(Page_kind(self)), Page_used(self),
                            Page_capacity(self), Page_isSealed(self) ? 1 : 0);
     bool cut = written < 0 || (bytes) written >= capacity;
@@ -376,7 +376,7 @@ bool Page_toStringStruct(const Page *self, char *dest, bytes capacity, bool *out
 
     if (self == nullptr)
         return writeNull(dest, capacity, outTruncated);
-    int written = snprintf(dest, capacity,
+    i32 written = snprintf(dest, capacity,
                            "Page{bytes=%p, size=%u, id=%u, kind=%s, used=%u, lastCode=%s, "
                            "sealed=%d, dirty=%d, free=%u, seal=%u}",
                            (any) (*self).bytes, Page_size(self), Page_id(self),

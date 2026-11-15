@@ -340,7 +340,7 @@ bool HeadlessService_adminLogin(HeadlessService *self, const char *username,
                                const char *password, u32 totpCode) {
     DateTime now = {0};
     DateTime_set(&now);
-    int64_t millis = DateTime_epochMillis(&now);
+    i64 millis = DateTime_epochMillis(&now);
     if (millis < 0)
         return false;
     return HeadlessService_adminLoginAt(self, username, password, totpCode,
@@ -390,7 +390,7 @@ bool HeadlessService_changeAdminPassword(HeadlessService *self,
                                         const char *newPassword, u32 totpCode) {
     DateTime now = {0};
     DateTime_set(&now);
-    int64_t millis = DateTime_epochMillis(&now);
+    i64 millis = DateTime_epochMillis(&now);
     if (millis < 0)
         return false;
     return HeadlessService_changeAdminPasswordAt(self, currentPassword, newPassword,
@@ -467,7 +467,7 @@ bool HeadlessService_toStringStruct(const HeadlessService *self, char *dest, byt
         *outTruncated = false;
     if (dest == nullptr || cap == 0u)
         return false;
-    int result = self == nullptr ? snprintf(dest, cap, "nullptr") : snprintf(dest, cap,
+    i32 result = self == nullptr ? snprintf(dest, cap, "nullptr") : snprintf(dest, cap,
         "HeadlessService{database:%s,adminSchema:%s,databasePathLength:%zu,store:%s,load:%s,remove:%s,context:%s,started:%s,adminAuthenticated:%s,acceptRequests:%s,passwordIterations:%u}",
         (*self).database == nullptr ? "nullptr" : "Database",
         (*self).adminSchema == nullptr ? "nullptr" : "Struct",

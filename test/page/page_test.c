@@ -36,7 +36,7 @@ static fn checkAdmission(Page *page, PageCode expected, const char *message) {
     FILE *capture = tmpfile();
     assert(capture != nullptr);
     assert(fflush(stderr) == 0);
-    int saved = dup(STDERR_FILENO);
+    i32 saved = dup(STDERR_FILENO);
     assert(saved >= 0 && dup2(fileno(capture), STDERR_FILENO) >= 0);
     assert(Page_verify(page) == expected);
     assert(Page_load(page) == expected);
@@ -51,7 +51,7 @@ static fn checkAdmission(Page *page, PageCode expected, const char *message) {
     if (expected == PAGE_OK)
         assert(length == 0u);
     else {
-        unsigned lines = 0u;
+        u32 lines = 0u;
         for (bytes i = 0u; i < length; ++i)
             if (output[i] == '\n')
                 ++lines;
@@ -155,7 +155,7 @@ static fn restoredAdmission() {
     Page_free(bare);
 }
 
-int main() {
+i32 main() {
     restoredAdmission();
     /* Legal page sizes are powers of two inside the advertised range. */
     assert(Page_sizeValid(PAGE_SIZE_MIN) && Page_sizeValid(PAGE_SIZE_DEFAULT));

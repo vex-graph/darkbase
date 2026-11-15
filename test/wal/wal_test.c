@@ -9,7 +9,7 @@
 // pristine/header/bounds admission, exact fill/full/reopen epochs, once-only
 // counted refusal, replay/callback rejection with append-position preservation,
 // checkpoint refusal, every partial/full uncommitted body of a 37-byte record,
-// each torn leading-marker prefix (fail closed), committed length corruption, short
+// each torn leading-marker prefix (fail closed), committed length corruption, i16
 // region tail, corrupt committed payload, overflow and surrounding canaries.
 // A shorter retry after a discarded tail must survive reopen. Constructors 0/1
 // and existing standalone checkpoint/replay behavior are retained below.
@@ -61,7 +61,7 @@ static fn resetSeen() { seenCount = 0u; memset(seenPayload, 0, sizeof seenPayloa
 
 static fn makePath() {
     const char *dir = getenv("TMPDIR");
-    (discard) snprintf(path, sizeof path, "%s/re-wal-%d.log", dir != nullptr ? dir : "/tmp", (int) getpid());
+    (discard) snprintf(path, sizeof path, "%s/re-wal-%d.log", dir != nullptr ? dir : "/tmp", (i32) getpid());
     (discard) unlink(path);
 }
 
@@ -69,7 +69,7 @@ static fn makePath() {
 static fn poke(bytes offset, const u8 *data, bytes length) {
     FILE *f = fopen(path, "r+b.sh");
     assert(f != nullptr);
-    assert(fseek(f, (long) offset, SEEK_SET) == 0);
+    assert(fseek(f, (i64) offset, SEEK_SET) == 0);
     assert(fwrite(data, 1, length, f) == length);
     assert(fclose(f) == 0);
 }
@@ -82,11 +82,11 @@ static fn appendRaw(const u8 *data, bytes length) {
     assert(fclose(f) == 0);
 }
 
-static long fileSize() {
+static i64 fileSize() {
     FILE *f = fopen(path, "rb");
     assert(f != nullptr);
     assert(fseek(f, 0, SEEK_END) == 0);
-    long size = ftell(f);
+    i64 size = ftell(f);
     (discard) fclose(f);
     return size;
 }
@@ -152,7 +152,7 @@ static fn regionCases() {
     // Capture the once-per-epoch refusal diagnostic and assert no second line.
     FILE *errors = tmpfile();
     assert(errors != nullptr);
-    int saved = dup(STDERR_FILENO);
+    i32 saved = dup(STDERR_FILENO);
     assert(saved >= 0 && dup2(fileno(errors), STDERR_FILENO) >= 0);
     assert(Wal_append(log, WAL_OP_UPDATE, payload, sizeof payload, &seq) == WAL_FULL);
     assert(Wal_append(log, WAL_OP_UPDATE, payload, sizeof payload, &seq) == WAL_FULL);
@@ -257,7 +257,7 @@ static fn regionCases() {
     log = Wal_3(path, REGION_OFFSET, REGION_CAPACITY);
     assert(Wal_code(log) == WAL_CORRUPT && !Wal_isOpen(log));
     Wal_free(log);
-    // A physically short remaining extent cannot cause a read outside its region.
+    // A physically i16 remaining extent cannot cause a read outside its region.
     regionFile();
     log = Wal_3(path, REGION_OFFSET, WAL_HEADER_BYTES + 7u);
     assert(Wal_isOpen(log));
@@ -301,7 +301,7 @@ static fn regionCases() {
     assert(unlink(path) == 0);
 }
 
-int main() {
+i32 main() {
     /* An unopened owner is CLOSED on every operation; arguments are a different code. */
     Wal *closed = Wal_0();
     assert(closed != nullptr && !Wal_isOpen(closed));
@@ -329,7 +329,7 @@ int main() {
     assert(Wal_code(log) == WAL_OK);
     assert(strcmp(Wal_path(log), path) == 0);
     assert(Wal_sequence(log) == 0u && Wal_count(log) == 0u);
-    assert(fileSize() == (long) WAL_HEADER_BYTES);   // a fresh log is header-only
+    assert(fileSize() == (i64) WAL_HEADER_BYTES);   // a fresh log is header-only
 
     assert(Wal_append(log, WAL_OP_INSERT, (const u8*) "alpha", 5u, nullptr) == WAL_OK);
     assert(Wal_append(log, WAL_OP_UPDATE, (const u8*) "beta!", 5u, nullptr) == WAL_OK);
@@ -342,8 +342,8 @@ int main() {
      * bytes: stdio buffers writes, so an external size measurement is only honest
      * after a flush. Sync first, then measure. */
     assert(Wal_sync(log) == WAL_OK);
-    long afterThree = fileSize();
-    assert(afterThree == (long) (WAL_HEADER_BYTES + 3u * (WAL_RECORD_FIXED + 5u + 4u)));
+    i64 afterThree = fileSize();
+    assert(afterThree == (i64) (WAL_HEADER_BYTES + 3u * (WAL_RECORD_FIXED + 5u + 4u)));
 
     /* Argument refusals never write; the file grows only for a legal record. */
     assert(Wal_append(log, 0u, (const u8*) "x", 1u, nullptr) == WAL_INVALID);
@@ -406,7 +406,7 @@ int main() {
     assert(Wal_sync(clean) == WAL_OK);
     assert(Wal_checkpoint(clean) == WAL_OK);
     assert(Wal_count(clean) == 0u && Wal_sequence(clean) == 3u && Wal_baseSequence(clean) == 3u);
-    assert(fileSize() == (long) WAL_HEADER_BYTES);              // header-only again
+    assert(fileSize() == (i64) WAL_HEADER_BYTES);              // header-only again
     assert(Wal_append(clean, WAL_OP_INSERT, (const u8*) "delta", 5u, &third) == WAL_OK);
     assert(third == 4u);                                        // the sequence NEVER restarts
     assert(Wal_sync(clean) == WAL_OK);
@@ -423,12 +423,12 @@ int main() {
 
     /* A COMPLETE record with a bad checksum is CORRUPTION, never a skip: a hole in a
      * log destroys the order the log exists to guarantee. */
-    assert(fileSize() > (long) (WAL_HEADER_BYTES + WAL_RECORD_FIXED));
+    assert(fileSize() > (i64) (WAL_HEADER_BYTES + WAL_RECORD_FIXED));
     u8 flipped[1];
     {
         FILE *f = fopen(path, "rb");
         assert(f != nullptr);
-        assert(fseek(f, (long) (WAL_HEADER_BYTES + WAL_RECORD_FIXED), SEEK_SET) == 0);
+        assert(fseek(f, (i64) (WAL_HEADER_BYTES + WAL_RECORD_FIXED), SEEK_SET) == 0);
         assert(fread(flipped, 1, 1, f) == 1u);
         (discard) fclose(f);
     }
@@ -457,7 +457,7 @@ int main() {
     bool truncated = true;
     assert(Wal_toString(final, text, sizeof text, &truncated));
     assert(!truncated && strstr(text, "Wal(") != nullptr);
-    char structText[1024];   // the struct dump includes the (long) temp path
+    char structText[1024];   // the struct dump includes the (i64) temp path
     assert(Wal_toStringStruct(final, structText, sizeof structText, &truncated));
     assert(!truncated && strstr(structText, "path=") != nullptr);
     assert(strstr(structText, "baseSequence=") != nullptr && strstr(structText, "tailTorn=") != nullptr);

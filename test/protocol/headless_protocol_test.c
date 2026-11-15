@@ -8,7 +8,7 @@
 #include <string.h>
 #include <unistd.h>
 
-static unsigned diagnostics;
+static u32 diagnostics;
 #define REFUSES(expression) do { ++diagnostics; assert(!(expression)); } while (false)
 
 // Known byte oracle, all stream splits, retained tail, request/response and busy.
@@ -92,7 +92,7 @@ static fn hostile() {
         assert(HeadlessProtocol_feed(&protocol, encoded, length, &used));
         assert(HeadlessProtocol_isReady(&protocol));
     }
-    const unsigned offsets[] = {0u, 0u, 0u, 4u, 6u, 8u, 10u, 12u};
+    const u32 offsets[] = {0u, 0u, 0u, 4u, 6u, 8u, 10u, 12u};
     const u8 values[] = {0u, 11u, 255u, 2u, 3u, 0u, 1u, 0u};
     for (bytes i = 0u; i < sizeof values; ++i) {
         u8 bad[64];
@@ -223,10 +223,10 @@ static fn defaults() {
     assert(HeadlessProtocol_toString(&protocol, text, sizeof text, nullptr));
 }
 
-int main() {
+i32 main() {
     FILE *capture = tmpfile();
     assert(capture != nullptr);
-    int saved = dup(STDERR_FILENO);
+    i32 saved = dup(STDERR_FILENO);
     assert(saved >= 0 && dup2(fileno(capture), STDERR_FILENO) >= 0);
     roundtrip();
     hostile();
@@ -236,7 +236,7 @@ int main() {
     assert(dup2(saved, STDERR_FILENO) >= 0);
     close(saved);
     rewind(capture);
-    unsigned count = 0u;
+    u32 count = 0u;
     char line[512];
     bool sawCapacity = false, sawVersion = false;
     while (fgets(line, sizeof line, capture) != nullptr) {

@@ -47,7 +47,7 @@ typedef enum PageKind {
     PAGE_KIND_FREE = 0,      // released: reusable by the free list
     PAGE_KIND_LEAF = 1,      // holds records
     PAGE_KIND_BRANCH = 2,    // holds child page ids
-    PAGE_KIND_OVERFLOW = 3,  // the tail of a value too long for its row
+    PAGE_KIND_OVERFLOW = 3,  // the tail of a value too i64 for its row
     PAGE_KIND_CATALOG = 4,   // schema and identity rows
 } PageKind;
 
@@ -95,7 +95,7 @@ PageCode Page_verify(const Page *self);
 PageCode Page_load(Page *self);
 
 PageCode    Page_code(const Page *self);
-u8    *Page_payload(Page *self);           // borrowed, Page_used bytes long
+u8    *Page_payload(Page *self);           // borrowed, Page_used bytes i64
 const u8 *Page_payloadOf(const Page *self);
 u32    Page_used(const Page *self);
 u32    Page_capacity(const Page *self);    // size minus the header

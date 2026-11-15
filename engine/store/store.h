@@ -22,7 +22,7 @@ typedef enum StoreCode {
 
 // Observation only; never reenter Store. Tests may terminate their disposable
 // child at these actual commit boundaries. No correctness decision uses a callback.
-typedef fn (*StoreCommitObserver)(any context, unsigned phase);
+typedef fn (*StoreCommitObserver)(any context, u32 phase);
 #define STORE_AFTER_LOG_SYNC 1u
 #define STORE_AFTER_PAGE_WRITE 2u
 #define STORE_AFTER_DATA_SYNC 3u

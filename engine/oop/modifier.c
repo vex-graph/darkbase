@@ -363,7 +363,7 @@ Modifier Modifier_parse(const char *text) {
         if (length == 0u || length >= MODIFIER_TOKEN_MAX) {
             self.lastCode = MODIFIER_BAD_TOKEN;
             THROW("Modifier_parse: modifier token over %u bytes",
-                  (unsigned) MODIFIER_TOKEN_MAX - 1u);
+                  (u32) MODIFIER_TOKEN_MAX - 1u);
             return self;
         }
         char token[MODIFIER_TOKEN_MAX];
@@ -387,7 +387,7 @@ Modifier Modifier_parse(const char *text) {
         if (count > (bytes) MODIFIER_TOKEN_LIMIT) {
             self.lastCode = MODIFIER_BAD_TOKEN;
             THROW("Modifier_parse: more than %u modifier tokens",
-                  (unsigned) MODIFIER_TOKEN_LIMIT);
+                  (u32) MODIFIER_TOKEN_LIMIT);
             return self;
         }
         cursor += length;
@@ -402,7 +402,7 @@ bool Modifier_toString(Modifier self, char *dest, bytes capacity, bool *outTrunc
             *outTruncated = true;
         return false;
     }
-    int written = snprintf(dest, capacity, "%s:%s:%s%s%s",
+    i32 written = snprintf(dest, capacity, "%s:%s:%s%s%s",
         Modifier_accessName((ModifierAccess) self.access),
         Modifier_protectionName((ModifierProtection) self.protection),
         Modifier_nullabilityName((ModifierNullability) self.nullability),
@@ -421,7 +421,7 @@ bool Modifier_toStringStruct(Modifier self, char *dest, bytes capacity,
             *outTruncated = true;
         return false;
     }
-    int written = snprintf(dest, capacity,
+    i32 written = snprintf(dest, capacity,
         "Modifier{access=%s, protection=%s, nullability=%s, transient=%d, "
         "shared=%d, lastCode=%s}",
         Modifier_accessName((ModifierAccess) self.access),

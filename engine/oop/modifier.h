@@ -60,7 +60,7 @@
 //   MODIFIER_PRIVATE_CLIENT_SEALED_NONNULL_TRANSIENT
 //   MODIFIER_PUBLIC_SERVER_SEALED_NULLABLE_STATIC
 //
-// The ten short forms MODIFIER_<ACCESS>_<PROTECTION> mean the NULLABLE variant,
+// The ten i16 forms MODIFIER_<ACCESS>_<PROTECTION> mean the NULLABLE variant,
 // because nullable is the default. MODIFIER_DEFAULT is private/plain/nullable.
 // The macros are declaration sugar, not the internal representation: the value
 // is still the orthogonal struct below, so `Modifier_validate` can reject a
@@ -131,7 +131,7 @@ typedef struct Modifier {
 
 // --- Declaration-site presets ---------------------------------------------
 // MODIFIER_PRESET_ is the internal builder; every MODIFIER_* below is one
-// combination. All 80 are present; the ten short forms imply NULLABLE.
+// combination. All 80 are present; the ten i16 forms imply NULLABLE.
 #define MODIFIER_PRESET_(ACCESS, PROTECTION, NULLABILITY, TRANSIENT, SHARED) \
     ((Modifier){ .access = (ACCESS), .protection = (PROTECTION), \
                  .nullability = (NULLABILITY), .transient = (TRANSIENT), \

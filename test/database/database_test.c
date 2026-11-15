@@ -45,15 +45,15 @@
  * ============================================================================
  */
 
-static int g_fail = 0;
-static int g_checks = 0;
+static i32 g_fail = 0;
+static i32 g_checks = 0;
 
 typedef struct DatabaseCrashProbe {
     u32 commits;
 } DatabaseCrashProbe;
 
 /** Terminates after the root redo marker is durable but before page apply. */
-static fn crashAtDatabaseRoot(any context, unsigned phase) {
+static fn crashAtDatabaseRoot(any context, u32 phase) {
     DatabaseCrashProbe *probe = (DatabaseCrashProbe*) context;
     if (phase == STORE_AFTER_LOG_SYNC && ++(*probe).commits == 3u)
         _exit(77);
@@ -249,13 +249,13 @@ static fn testDiagnostics() {
     CHECK(Database_errorCode(db) == DATABASE_INVALID);
 
     char buf[128];
-    int len = Database_lastError(db, buf, sizeof(buf));
+    i32 len = Database_lastError(db, buf, sizeof(buf));
     CHECK(len > 0 && (bytes) len == strlen(buf));
     CHECK(strstr(buf, "define") != nullptr);
 
     // A too-small destination truncates silently at the byte level (bounded).
     char tiny[4];
-    int tinyLen = Database_lastError(db, tiny, sizeof(tiny));
+    i32 tinyLen = Database_lastError(db, tiny, sizeof(tiny));
     CHECK(tinyLen == 3 && tiny[3] == '\0');
 
     CHECK(strcmp(Database_errorText(DATABASE_INVALID), "invalid argument") == 0);
@@ -279,7 +279,7 @@ static fn testPersistence() {
         tmp = "/tmp";
     char path[256];
     snprintf(path, sizeof(path), "%sdarkbase_test_XXXXXX", tmp);
-    int fd = mkstemp(path);
+    i32 fd = mkstemp(path);
     CHECK(fd >= 0);
     if (fd < 0)
         return;
@@ -347,7 +347,7 @@ static fn testPersistence() {
     FILE *fp = fopen(path, "r+b.sh");
     CHECK(fp != nullptr);
     if (fp) {
-        unsigned char last = 0u;
+        u8 last = 0u;
         fseek(fp, -1L, SEEK_END);
         if (fread(&last, 1u, 1u, fp) == 1u) {
             last ^= 0xFFu;
@@ -384,14 +384,14 @@ static fn testSafeSave() {
         tmp = "/tmp";
     char path[256];
     snprintf(path, sizeof(path), "%sdarkbase_save_XXXXXX", tmp);
-    int fd = mkstemp(path);
+    i32 fd = mkstemp(path);
     CHECK(fd >= 0);
     if (fd < 0)
         return;
     close(fd);
 
     char tpath[300];
-    snprintf(tpath, sizeof(tpath), "%s.%ld.tmp", path, (long) getpid());
+    snprintf(tpath, sizeof(tpath), "%s.%ld.tmp", path, (i64) getpid());
 
     // First snapshot: 4 rows.
     Database *a = Database();
@@ -466,7 +466,7 @@ static fn testPageStorePersistence() {
         tmp = "/tmp/";
     char path[256];
     snprintf(path, sizeof(path), "%sdarkbase_pages_XXXXXX", tmp);
-    int fd = mkstemp(path);
+    i32 fd = mkstemp(path);
     CHECK(fd >= 0);
     if (fd < 0)
         return;
@@ -593,7 +593,7 @@ static fn testPageStoreRecovery() {
         tmp = "/tmp/";
     char path[256];
     snprintf(path, sizeof(path), "%sdarkbase_recovery_XXXXXX", tmp);
-    int fd = mkstemp(path);
+    i32 fd = mkstemp(path);
     CHECK(fd >= 0);
     if (fd < 0)
         return;
@@ -624,7 +624,7 @@ static fn testPageStoreRecovery() {
         remove(path);
         return;
     }
-    int childStatus = 0;
+    i32 childStatus = 0;
     CHECK(waitpid(child, &childStatus, 0) == child);
     CHECK(WIFEXITED(childStatus) && WEXITSTATUS(childStatus) == 77);
 
@@ -822,7 +822,7 @@ static fn testPersistedIndex() {
         tmp = "/tmp/";
     char path[256];
     snprintf(path, sizeof(path), "%sdarkbase_index_XXXXXX", tmp);
-    int fd = mkstemp(path);
+    i32 fd = mkstemp(path);
     CHECK(fd >= 0);
     if (fd < 0)
         return;
@@ -942,7 +942,7 @@ static fn testPersistedIndex() {
     remove(path);
 }
 
-int main() {
+i32 main() {
     printf("=== Database Test Suite ===\n\n");
 
     testConstructorAndNull();

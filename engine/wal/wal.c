@@ -98,7 +98,7 @@
  * PRIVATE HELPERS
  *   putU32/putU64/getU32/getU64   explicit memory-order encoders (the format)
  *   encodeHeader/writeHeader      header bytes + checksum
- *   readExact/writeExact          short-read/short-write loops over File
+ *   readExact/writeExact          i16-read/i16-write loops over File
  *   scanHeader(self)              verify and adopt the file header
  *   scanRecords(self, scratch, cap, visit, ctx)   the one recovery walk
  *   syncFile(self)                flush plus the host's fsync
@@ -132,7 +132,7 @@ static fn putU32(u8 *out, u32 value) {
 }
 
 static fn putU64(u8 *out, u64 value) {
-    for (unsigned i = 0u; i < 8u; i++)
+    for (u32 i = 0u; i < 8u; i++)
         out[i] = (u8) (value >> (i * 8u));
 }
 
@@ -143,7 +143,7 @@ static u32 getU32(const u8 *in) {
 
 static u64 getU64(const u8 *in) {
     u64 value = 0u;
-    for (unsigned i = 0u; i < 8u; i++)
+    for (u32 i = 0u; i < 8u; i++)
         value |= (u64) in[i] << (i * 8u);
     return value;
 }
@@ -152,7 +152,7 @@ static bool readExact(File *file, any dest, bytes length) {
     u8 *p = (u8*) dest;
     bytes done = 0u;
     while (done < length) {
-        int64_t n = File_read(file, p + done, (int64_t) (length - done));
+        i64 n = File_read(file, p + done, (i64) (length - done));
         if (n <= 0)
             return false;
         done += (bytes) n;
@@ -164,7 +164,7 @@ static bool writeExact(File *file, const_any src, bytes length) {
     const u8 *p = (const u8*) src;
     bytes done = 0u;
     while (done < length) {
-        int64_t n = File_write(file, p + done, (int64_t) (length - done));
+        i64 n = File_write(file, p + done, (i64) (length - done));
         if (n <= 0)
             return false;
         done += (bytes) n;
@@ -197,7 +197,7 @@ static fn encodeHeader(const Wal *self, u8 out[WAL_HEADER_BYTES]) {
 static bool writeHeader(Wal *self) {
     u8 header[WAL_HEADER_BYTES];
     encodeHeader(self, header);
-    if (!File_seek((File*) (*self).file, (int64_t) (*self).offset))
+    if (!File_seek((File*) (*self).file, (i64) (*self).offset))
         return false;
     return writeExact((File*) (*self).file, header, WAL_HEADER_BYTES);
 }
@@ -206,7 +206,7 @@ static WalCode scanHeader(Wal *self) {
     u8 header[WAL_HEADER_BYTES];
     if (!File_seek((File*) (*self).file, 0))
         return WAL_IO;
-    int64_t size = File_size((File*) (*self).file);
+    i64 size = File_size((File*) (*self).file);
     if (size == 0) {
         // A brand-new log: write the header and start from sequence zero.
         (*self).baseSequence = 0u;
@@ -216,7 +216,7 @@ static WalCode scanHeader(Wal *self) {
             return WAL_IO;
         return WAL_OK;
     }
-    if (size < (int64_t) WAL_HEADER_BYTES || !readExact((File*) (*self).file, header, WAL_HEADER_BYTES))
+    if (size < (i64) WAL_HEADER_BYTES || !readExact((File*) (*self).file, header, WAL_HEADER_BYTES))
         return WAL_CORRUPT;
     if (getU32(&header[0]) != WAL_MAGIC || header[4] != (u8) WAL_VERSION)
         return WAL_CORRUPT;
@@ -240,15 +240,15 @@ static WalCode scanRecords(Wal *self, u8 *scratch, bytes scratchCap,
     u64 expected = (*self).baseSequence;
     u32 seen = 0u;
     u32 delivered = 0u;
-    if (!File_seek(file, (int64_t) WAL_HEADER_BYTES))
+    if (!File_seek(file, (i64) WAL_HEADER_BYTES))
         return WAL_IO;
     for (;;) {
         u8 prefix[WAL_RECORD_FIXED];
         u8 trailer[4];
-        int64_t prefixBytes = File_read(file, prefix, (int64_t) WAL_RECORD_FIXED);
+        i64 prefixBytes = File_read(file, prefix, (i64) WAL_RECORD_FIXED);
         if (prefixBytes <= 0)
             break;                       // clean end at a record boundary
-        if (prefixBytes < (int64_t) WAL_RECORD_FIXED) {
+        if (prefixBytes < (i64) WAL_RECORD_FIXED) {
             (*self).tailTorn = true;     // a crash tore this record's prefix
             break;
         }
@@ -313,7 +313,7 @@ static WalCode scanRecords(Wal *self, u8 *scratch, bytes scratchCap,
 
 static bool regionRead(Wal *self, u64 at, any dest, bytes size) {
     return at <= (*self).capacity && size <= (*self).capacity - at &&
-           File_seek((File*) (*self).file, (int64_t) ((*self).offset + at)) &&
+           File_seek((File*) (*self).file, (i64) ((*self).offset + at)) &&
            readExact((File*) (*self).file, dest, size);
 }
 
@@ -559,7 +559,7 @@ WalCode Wal_append(Wal *self, u32 op, const u8 *payload, u32 length,
     if ((*self).region && total > Wal_remaining(self)) {
         if ((*self).exhaustionCount++ == 0u)
             THROW("Wal_append: region exhausted, request %llu bytes (remaining %llu)",
-                  (unsigned long long) total, (unsigned long long) Wal_remaining(self));
+                  (u64) total, (u64) Wal_remaining(self));
         (*self).lastCode = WAL_FULL;
         return WAL_FULL;
     }
@@ -579,7 +579,7 @@ WalCode Wal_append(Wal *self, u32 op, const u8 *payload, u32 length,
     if ((*self).region && (*self).tailTorn) {
         // Clear discarded bytes before a shorter replacement can expose stale markers.
         u8 zeros[WAL_READ_CHUNK] = {0};
-        bool cleared = File_seek(file, (int64_t) ((*self).offset + (*self).end));
+        bool cleared = File_seek(file, (i64) ((*self).offset + (*self).end));
         for (u64 pos = (*self).end; cleared && pos < (*self).capacity;) {
             bytes take = (*self).capacity - pos < sizeof zeros ?
                           (bytes) ((*self).capacity - pos) : sizeof zeros;
@@ -593,7 +593,7 @@ WalCode Wal_append(Wal *self, u32 op, const u8 *payload, u32 length,
             return WAL_IO;
         }
     }
-    int64_t position = (*self).region ? (int64_t) ((*self).offset + (*self).end) : File_refreshSize(file);
+    i64 position = (*self).region ? (i64) ((*self).offset + (*self).end) : File_refreshSize(file);
     u8 zeroMarker[WAL_COMMIT_BYTES] = {0};
     if (!File_seek(file, position) ||
         ((*self).region && !writeExact(file, zeroMarker, sizeof zeroMarker)) ||
@@ -699,7 +699,7 @@ WalCode Wal_checkpoint(Wal *self) {
     }
     File *file = (File*) (*self).file;
 #if defined(VEX_PLATFORM_WINDOWS)
-    if (_chsize_s(_fileno(File_handle(file)), (long long) WAL_HEADER_BYTES) != 0) {
+    if (_chsize_s(_fileno(File_handle(file)), (i64) WAL_HEADER_BYTES) != 0) {
 #else
     if (ftruncate(fileno(File_handle(file)), (off_t) WAL_HEADER_BYTES) != 0) {
 #endif
@@ -709,7 +709,7 @@ WalCode Wal_checkpoint(Wal *self) {
     }
     // The truncation changed the file's length behind the handle's back.
     (discard) File_refreshSize(file);
-    if (!File_seek(file, (int64_t) WAL_HEADER_BYTES) || !syncFile(self)) {
+    if (!File_seek(file, (i64) WAL_HEADER_BYTES) || !syncFile(self)) {
         THROW("Wal_checkpoint: the truncated log could not be made durable");
         (*self).lastCode = WAL_IO;
         return WAL_IO;
@@ -754,10 +754,10 @@ bool Wal_toString(const Wal *self, char *dest, bytes capacity, bool *outTruncate
 
     if (self == nullptr)
         return writeNull(dest, capacity, outTruncated);
-    int written = snprintf(dest, capacity, "Wal(open=%d, sequence=%llu, count=%u, base=%llu)",
+    i32 written = snprintf(dest, capacity, "Wal(open=%d, sequence=%llu, count=%u, base=%llu)",
                            self != nullptr && (*self).open ? 1 : 0,
-                           (unsigned long long) Wal_sequence(self), Wal_count(self),
-                           (unsigned long long) Wal_baseSequence(self));
+                           (u64) Wal_sequence(self), Wal_count(self),
+                           (u64) Wal_baseSequence(self));
     bool cut = written < 0 || (bytes) written >= capacity;
     if (outTruncated != nullptr)
         *outTruncated = cut;
@@ -797,19 +797,19 @@ bool Wal_toStringStruct(const Wal *self, char *dest, bytes capacity, bool *outTr
         return writeNull(dest, capacity, outTruncated);
     char path[WAL_PATH_MAX * 4u + 3u];
     quotePath((*self).path, path);
-    int written = snprintf(dest, capacity,
+    i32 written = snprintf(dest, capacity,
                             "Wal{file=<owned>, path=%s, baseSequence=%llu, sequence=%llu, count=%u, "
                             "recovered=%u, lastCode=%s, tailTorn=%d, open=%d, offset=%llu, "
                             "capacity=%llu, end=%llu, exhaustionCount=%llu, region=%d, poisoned=%d}",
                             path,
-                            (unsigned long long) Wal_baseSequence(self),
-                            (unsigned long long) Wal_sequence(self), Wal_count(self),
+                            (u64) Wal_baseSequence(self),
+                            (u64) Wal_sequence(self), Wal_count(self),
                             Wal_recovered(self), Wal_codeName((*self).lastCode),
                             (*self).tailTorn ? 1 : 0, (*self).open ? 1 : 0,
-                            (unsigned long long) (*self).offset,
-                            (unsigned long long) (*self).capacity,
-                            (unsigned long long) (*self).end,
-                            (unsigned long long) (*self).exhaustionCount,
+                            (u64) (*self).offset,
+                            (u64) (*self).capacity,
+                            (u64) (*self).end,
+                            (u64) (*self).exhaustionCount,
                             (*self).region ? 1 : 0, (*self).poisoned ? 1 : 0);
     bool cut = written < 0 || (bytes) written >= capacity;
     if (outTruncated != nullptr)
