@@ -1436,7 +1436,7 @@ i32 Database_save(Database *self, const char *path) {
     // over the destination. A failed or interrupted write leaves the previous
     // snapshot intact; the destination is only ever the old or the new file.
     char tmp[FILE_PATH_MAX + 32];
-    i32 tmpLen = snprintf(tmp, sizeof(tmp), "%s.%ld.tmp", path, (i64) getpid());
+    i32 tmpLen = snprintf(tmp, sizeof(tmp), "%s.%lld.tmp", path, (i64) getpid());
     if (tmpLen < 0 || (bytes) tmpLen >= sizeof(tmp)) {
         recordError(self, DATABASE_INVALID, "save: path too long");
         THROW("Database_save: path too long");

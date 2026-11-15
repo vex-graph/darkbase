@@ -391,7 +391,7 @@ static fn testSafeSave() {
     close(fd);
 
     char tpath[300];
-    snprintf(tpath, sizeof(tpath), "%s.%ld.tmp", path, (i64) getpid());
+    snprintf(tpath, sizeof(tpath), "%s.%lld.tmp", path, (i64) getpid());
 
     // First snapshot: 4 rows.
     Database *a = Database();
