@@ -1,5 +1,5 @@
+#include "vex.h"
 #include "util/crc32.h"
-#include "annotation/annotation.h"
 
 ;;DEFINITION
 /** The reflected IEEE CRC32 every durable byte in this engine is checked with. It

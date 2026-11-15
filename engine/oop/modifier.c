@@ -1,10 +1,9 @@
+#include "vex.h"
 #include "oop/modifier.h"
 
 #include <stdio.h>
 #include <string.h>
 
-#include "annotation/annotation.h"
-#include "exception/throw.h"
 
 ;;DEFINITION
 /** A Modifier is the frozen keyword set of a vex database field: how it is

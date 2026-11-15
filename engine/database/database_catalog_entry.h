@@ -1,8 +1,7 @@
 #ifndef DARKBASE_DATABASE_DATABASE_CATALOG_ENTRY_H
 #define DARKBASE_DATABASE_DATABASE_CATALOG_ENTRY_H
 
-#include <stdbool.h>
-#include <stdint.h>
+#include "vex.h"
 
 #define DB_ENTITY_NAME_BYTES 24u
 

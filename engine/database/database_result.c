@@ -1,12 +1,11 @@
 // database/database_result.c — the DatabaseResult row cursor.
 
+#include "vex.h"
 #include "database/database_result.h"
 
 #include <stdio.h>
 
-#include "annotation/annotation.h"
 #include "oop/darkbase_type.h"
-#include "exception/throw.h"
 #include "nio/mem.h"
 #include "oop/darkbase_type.h"
 

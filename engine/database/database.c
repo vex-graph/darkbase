@@ -1,5 +1,6 @@
 // database/database.c — the L2 Database: the entity/row switchboard.
 
+#include "vex.h"
 #include "database/database.h"
 #include "util/crc32.h"
 
@@ -7,14 +8,12 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "annotation/annotation.h"
 #include "oop/darkbase_type.h"
-#include "exception/throw.h"
-#include "io/file.h"
+#include "io/file/file.h"
 #include "nio/mem.h"
 #include "oop/darkbase_type.h"
 #include "reflection/struct.h"
-#include "relational/variable_slot.h"
+#include "substrate/variable/variable_slot.h"
 #include "store/store.h"
 
 ;;DEFINITION

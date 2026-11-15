@@ -1,13 +1,10 @@
 #ifndef DARKBASE_STORE_STORE_H
 #define DARKBASE_STORE_STORE_H
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include "util/constructor.h"
+#include "vex.h"
 #include "page/page.h"
 #include "wal/wal.h"
-#include "nio/growable_mapped_file.h"
+#include "relational_engine/growable_mapped_file.h"
 
 // One file: immutable bootstrap page, caller-sized embedded redo region, data pages.
 // Single caller-owned exclusion domain, stable trusted path, no external mutation

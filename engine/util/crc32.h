@@ -1,8 +1,7 @@
 #ifndef DARKBASE_UTIL_CRC32_H
 #define DARKBASE_UTIL_CRC32_H
 
-#include <stddef.h>
-#include <stdint.h>
+#include "vex.h"
 
 // util/crc32.h — the engine's one CRC32 (reflected IEEE, polynomial 0xEDB88320).
 //

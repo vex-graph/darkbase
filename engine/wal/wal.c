@@ -1,5 +1,5 @@
+#include "vex.h"
 #include "wal/wal.h"
-#include "lifetime/platform.h"
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -8,10 +8,8 @@
 #else
 #include <unistd.h>
 #endif
-#include "annotation/annotation.h"
 #include "oop/darkbase_type.h"
-#include "exception/throw.h"
-#include "io/file.h"
+#include "io/file/file.h"
 #include "nio/mem.h"
 #include "util/crc32.h"
 

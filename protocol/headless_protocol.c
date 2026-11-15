@@ -1,6 +1,5 @@
+#include "vex.h"
 #include "protocol/headless_protocol.h"
-#include "annotation/annotation.h"
-#include "exception/throw.h"
 #include <stdio.h>
 #include <string.h>
 

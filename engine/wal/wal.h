@@ -1,10 +1,7 @@
 #ifndef DARKBASE_WAL_WAL_H
 #define DARKBASE_WAL_WAL_H
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include "util/constructor.h"
+#include "vex.h"
 
 // wal/wal.h — the write-ahead log: the reason a crash mid-write is survivable.
 //

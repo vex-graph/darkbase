@@ -1,9 +1,7 @@
 #ifndef HEADLESS_PROTOCOL_H
 #define HEADLESS_PROTOCOL_H
 
-#include <stddef.h>
-#include <stdint.h>
-#include "util/constructor.h"
+#include "vex.h"
 
 // V1 wire constants, not storage layout or configurable application defaults.
 #define HEADLESS_WIRE_VERSION 1u

@@ -1,9 +1,7 @@
 #ifndef DARKBASE_PAGE_PAGE_H
 #define DARKBASE_PAGE_PAGE_H
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
+#include "vex.h"
 
 // page/page.h — the page: the unit of durability, checksumming and addressing.
 //
