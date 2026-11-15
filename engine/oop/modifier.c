@@ -62,7 +62,7 @@
  *
  * FUNCTION REGISTRY (exports)
  *   Constructors:
- *     Modifier Modifier_0(void)
+ *     Modifier Modifier_0()
  *     Modifier Modifier_3(access, protection, nullability)
  *     Modifier Modifier_5(access, protection, nullability, transient, shared)
  *     #define Modifier(...)   arity dispatch
@@ -169,7 +169,7 @@ static Modifier applyAxis(Modifier self, ModifierAxis axis, const char *token) {
     return self;
 }
 
-Modifier Modifier_0(void) {
+Modifier Modifier_0() {
     Modifier self = {
         .access = (u32) MODIFIER_ACCESS_PRIVATE,
         .protection = (u32) MODIFIER_PROTECTION_PLAIN,

@@ -58,9 +58,9 @@
  *
  * FUNCTION REGISTRY (exports)
  *   Constructors / lifecycle:
- *     Page *Page_0(void)
+ *     Page *Page_0()
  *     Page *Page_2(u8 *bytes, u32 size)
- *     void Page_free(Page *self)
+ *     fn Page_free(Page *self)
  *     bool Page_sizeValid(u32 size)
  *   Writing / admission:
  *     PageCode Page_format(Page *self, u32 id, u32 kind)
@@ -82,7 +82,7 @@
  *     u32 Page_sealValue(const Page *self)
  *     bool Page_isSealed(const Page *self)
  *     bool Page_isDirty(const Page *self)
- *     void Page_markClean(Page *self)
+ *     fn Page_markClean(Page *self)
  *   Naming / projections:
  *     const char *Page_codeName(PageCode code)
  *     const char *Page_kindName(u32 kind)
@@ -91,12 +91,12 @@
  *     bool Page_toStringStruct(const Page *self, char *dest, bytes capacity,
  *                              bool *outTruncated)
  * PRIVATE HELPERS
- *   static void putU32(u8 *out, u32 value) — memory-order encoder
+ *   static fn putU32(u8 *out, u32 value) — memory-order encoder
  *   static u32 getU32(const u8 *in) — memory-order decoder
  *   static u8 *payloadBytes(const Page *self) — borrowed payload area
  *   static u32 computeSeal(const Page *self, u32 used) — bounded CRC
- *   static void writeHeader(Page *self) — initialize an unsealed header
- *   static Page *allocPage(void) — allocate only the Page owner
+ *   static fn writeHeader(Page *self) — initialize an unsealed header
+ *   static Page *allocPage() — allocate only the Page owner
  *   static bool writeNull(char *dest, bytes capacity, bool *outTruncated)
  *     — bounded null-owner projection
  * CONTRACT: null storage, an illegal size, a bad argument, an overflowing append, a
@@ -109,7 +109,7 @@
  * mutation/destruction; borrowed storage must remain live and fully sized.
  * ======================================================================== */
 
-static void putU32(u8 *out, u32 value) {
+static fn putU32(u8 *out, u32 value) {
     out[0] = (u8) value;
     out[1] = (u8) (value >> 8);
     out[2] = (u8) (value >> 16);
@@ -136,7 +136,7 @@ static u32 computeSeal(const Page *self, u32 used) {
     return Crc32_finalize(Crc32_update(crc, payloadBytes(self), used));
 }
 
-static void writeHeader(Page *self) {
+static fn writeHeader(Page *self) {
     putU32((*self).bytes + 0u, PAGE_MAGIC);
     putU32((*self).bytes + 4u, (*self).id);
     putU32((*self).bytes + 8u, (*self).kind);
@@ -147,7 +147,7 @@ static void writeHeader(Page *self) {
     putU32((*self).bytes + PAGE_SEAL_OFFSET, 0u);   // unsealed
 }
 
-static Page *allocPage(void) {
+static Page *allocPage() {
     Page *self = (Page*) Memory_alloc(TYPE_DB_PAGE_SINGLETON, sizeof(Page));
     if (self == nullptr) {
         THROW("Page: allocation refused");
@@ -157,7 +157,7 @@ static Page *allocPage(void) {
     return self;
 }
 
-Page *Page_0(void) { return allocPage(); }
+Page *Page_0() { return allocPage(); }
 
 Page *Page_2(u8 *bytes, u32 size) {
     if (bytes == nullptr || !Page_sizeValid(size)) {
@@ -172,7 +172,7 @@ Page *Page_2(u8 *bytes, u32 size) {
     return self;
 }
 
-void Page_free(Page *self) {
+fn Page_free(Page *self) {
     if (self != nullptr)
         Memory_free(self);
 }
@@ -311,7 +311,7 @@ u32 Page_sealValue(const Page *self) {
 }
 bool Page_isSealed(const Page *self) { return self != nullptr && (*self).sealed; }
 bool Page_isDirty(const Page *self) { return self != nullptr && (*self).dirty; }
-void Page_markClean(Page *self) { if (self != nullptr) (*self).dirty = false; }
+fn Page_markClean(Page *self) { if (self != nullptr) (*self).dirty = false; }
 
 const char *Page_codeName(PageCode code) {
     switch (code) {
@@ -380,7 +380,7 @@ bool Page_toStringStruct(const Page *self, char *dest, bytes capacity, bool *out
     int written = snprintf(dest, capacity,
                            "Page{bytes=%p, size=%u, id=%u, kind=%s, used=%u, lastCode=%s, "
                            "sealed=%d, dirty=%d, free=%u, seal=%u}",
-                           (void*) (*self).bytes, Page_size(self), Page_id(self),
+                           (any) (*self).bytes, Page_size(self), Page_id(self),
                            Page_kindName(Page_kind(self)), Page_used(self),
                            Page_codeName(Page_code(self)), Page_isSealed(self) ? 1 : 0,
                            Page_isDirty(self) ? 1 : 0, Page_freeSpace(self), Page_sealValue(self));

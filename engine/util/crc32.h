@@ -14,11 +14,11 @@
 // over pieces that are written separately.
 
 // Run the accumulator over more bytes. Start from CRC32_SEED for a fresh checksum.
-u32 Crc32_update(u32 crc, const void *data, bytes length);
+u32 Crc32_update(u32 crc, const_any data, bytes length);
 // Complement the accumulator: the value that gets stored.
 u32 Crc32_finalize(u32 crc);
 // One-shot checksum over a single span.
-u32 Crc32_of(const void *data, bytes length);
+u32 Crc32_of(const_any data, bytes length);
 
 #define CRC32_SEED 0xFFFFFFFFu
 

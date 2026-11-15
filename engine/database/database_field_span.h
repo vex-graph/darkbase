@@ -1,8 +1,7 @@
 #ifndef DARKBASE_DATABASE_DATABASE_FIELD_SPAN_H
 #define DARKBASE_DATABASE_DATABASE_FIELD_SPAN_H
 
-#include <stdint.h>
-
+#include "vex.h"
 #include "database/database.h"
 
 // database/database_field_span.h — one field's resolved in-row byte span.

@@ -6,6 +6,8 @@
 // API is offered, so racing mutation/reset is outside this owner's contract.
 #define _POSIX_C_SOURCE 200809L
 #define _DARWIN_C_SOURCE 1
+
+#include "vex.h"
 #include "store/store.h"
 #include "nio/mem.h"
 #include "util/crc32.h"
@@ -51,12 +53,12 @@ WalCode StoreTest_walSync(Wal *owner) {
 }
 #endif
 
-static void fixture(char path[1024]) {
+static fn fixture(char path[1024]) {
     int n = snprintf(path, 1024u, "%s/store-%u.vexdb", directory, ++fixtureId);
     assert(n > 0 && n < 1024);
 }
 
-static void readEquals(Store *store, u32 id, const u8 *expected, u32 length) {
+static fn readEquals(Store *store, u32 id, const u8 *expected, u32 length) {
     u8 bytes[TEST_PAGE];
     memset(bytes, 0xCC, sizeof bytes);
     u32 actual = UINT32_MAX, kind = UINT32_MAX;
@@ -67,13 +69,13 @@ static void readEquals(Store *store, u32 id, const u8 *expected, u32 length) {
     assert(bytes[length] == 0xCC);
 }
 
-static void crashObserver(void *context, unsigned phase) {
+static fn crashObserver(any context, unsigned phase) {
     unsigned *selected = (unsigned*) context;
     if (phase == *selected)
         _exit(100 + (int) phase);
 }
 
-static void lifecycle(void) {
+static fn lifecycle() {
     char path[1024];
     fixture(path);
     assert(Store_1(path) == nullptr); // missing is not implicit creation
@@ -158,7 +160,7 @@ static void lifecycle(void) {
     assert(unlink(path) == 0);
 }
 
-static void boundedResources(void) {
+static fn boundedResources() {
     char path[1024];
     fixture(path);
     // Exactly two data pages; journal ample for release/reuse/refill history.
@@ -200,7 +202,7 @@ static void boundedResources(void) {
     assert(unlink(path) == 0);
 }
 
-static void interruptedCommit(unsigned phase) {
+static fn interruptedCommit(unsigned phase) {
     char path[1024];
     fixture(path);
     Store *store = Store_4(path, TEST_RESERVATION, TEST_PAGE, TEST_JOURNAL);
@@ -215,7 +217,7 @@ static void interruptedCommit(unsigned phase) {
         assert(writer != nullptr);
         Store_setCommitObserver(writer, crashObserver, &phase);
         assert(Store_getCommitObserver(writer) == crashObserver && Store_getObserverContext(writer) == &phase);
-        (void) Store_page_write(writer, id, PAGE_KIND_LEAF, (const u8*) "durable-redo", 12u);
+        (discard) Store_page_write(writer, id, PAGE_KIND_LEAF, (const u8*) "durable-redo", 12u);
         _exit(9); // must not return from the selected actual commit boundary
     }
     int status = 0;
@@ -239,7 +241,7 @@ static void interruptedCommit(unsigned phase) {
     assert(unlink(path) == 0);
 }
 
-static void invalidAdmission(void) {
+static fn invalidAdmission() {
     char path[1024];
     fixture(path);
     assert(Store_4(nullptr, 4096u, TEST_PAGE, 1024u) == nullptr);
@@ -283,7 +285,7 @@ static void invalidAdmission(void) {
     assert(unlink(path) == 0);
 }
 
-static void forgedBaseline(void) {
+static fn forgedBaseline() {
     char path[1024];
     fixture(path);
     Store *store = Store_4(path, TEST_RESERVATION, TEST_PAGE, TEST_JOURNAL);
@@ -315,7 +317,7 @@ static void forgedBaseline(void) {
 }
 
 #ifdef STORE_FAULT_TESTS
-static void uncertainIO(void) {
+static fn uncertainIO() {
     for (unsigned stage = 1u; stage <= 5u; ++stage) {
         char path[1024];
         fixture(path);

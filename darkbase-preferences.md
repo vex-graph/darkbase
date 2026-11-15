@@ -50,7 +50,7 @@ Tier: core (R3 Database Driver). Owns: Database interface, native vex store sche
 * Values are raw byte spans (`u8[]`), written in memory order and read back the same — no byte-order machinery (no endianness detection, byte swapping or text encoding).
 * `toString` is a cold converter for humans, never storage.
 * Persisted row bytes carry no raw pointers; references and functions rebind by name/index on load.
-* Canonical variable: `{ u8 name[24], void* pointer }` — names 24 bytes, `void*` value a pointer to its bytes.
+* Canonical variable: `{ u8 name[24], any pointer }` — names 24 bytes, `any` value a pointer to its bytes.
 
 ### Zero-Alloc Relational Table Scan Law
 

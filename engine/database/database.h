@@ -1,11 +1,7 @@
 #ifndef DARKBASE_DATABASE_DATABASE_H
 #define DARKBASE_DATABASE_DATABASE_H
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-
-#include "util/constructor.h"
+#include "vex.h"
 #include "database/database_catalog_entry.h"
 #include "database/database_field_span.h"
 #include "database/database_result.h"
@@ -60,12 +56,12 @@ typedef struct Database {
 
 // --- Constructors ---
 // _0() uses the default leaf budget; _1(chunkBytes) overrides it. Arena-allocated.
-Database *Database_0(void);
+Database *Database_0();
 Database *Database_1(u32 chunkBytes);
 #define Database(...) CONSTRUCTOR_DISPATCH(Database, __VA_ARGS__)
 // Release an arena-allocated Database and every per-entity row list. Rows are
 // borrowed (never freed here). Never call on an inline instance.
-void Database_free(Database *self);
+fn Database_free(Database *self);
 
 u64 Database_kind(const Database *self);
 bool Database_check(const Database *self, u64 typeId);
@@ -82,14 +78,14 @@ u32 Database_entityCount(const Database *self);
 Struct *Database_schema(const Database *self, const char *entity);
 
 // Bind a caller-owned live row to an entity. Returns the row index, or -1.
-i32 Database_insert(Database *self, const char *entity, void *row);
+i32 Database_insert(Database *self, const char *entity, any row);
 // Copy one exact schema-stride row into Database ownership. An entity is either
 // entirely borrowed (Database_insert) or owned (loaded / insertOwned); rows do
 // not mix ownership modes. Returns the row index, or -1 without mutation.
-i32 Database_insertOwned(Database *self, const char *entity, const void *rowBytes,
+i32 Database_insertOwned(Database *self, const char *entity, const_any rowBytes,
                              bytes rowBytesLength);
 // The row pointer at an index, or null (null-safe).
-void *Database_row(const Database *self, const char *entity, u32 index);
+any Database_row(const Database *self, const char *entity, u32 index);
 // Live rows bound to an entity (0 when absent).
 u32 Database_count(const Database *self, const char *entity);
 // A fresh dest-last cursor over an entity's rows, or null when absent.
@@ -99,7 +95,7 @@ DatabaseResult *Database_select(Database *self, const char *entity);
 // its pointer-list container but borrows the matching row values; free it before
 // Database. Equal values use exact byte equality, not numeric conversion.
 DatabaseResult *Database_queryEqual(Database *self, const char *entity,
-                                    const char *field, const void *value,
+                                    const char *field, const_any value,
                                     bytes valueLength);
 // Inclusive signed int32 range query: the field bytes are interpreted as a
 // native i32 regardless of reflected typeId. The field must have exactly
@@ -163,7 +159,7 @@ int Database_lastError(const Database *self, char *out, bytes outCap);
 // Static text for a DATABASE_* code (never null).
 const char *Database_errorText(i32 code);
 
-void Database_toString(const Database *self, char *dest, bytes cap, bool *outTruncated);
-void Database_toStringStruct(const Database *self, char *dest, bytes cap, bool *outTruncated);
+fn Database_toString(const Database *self, char *dest, bytes cap, bool *outTruncated);
+fn Database_toStringStruct(const Database *self, char *dest, bytes cap, bool *outTruncated);
 
 #endif

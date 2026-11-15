@@ -45,11 +45,11 @@
  *   bool open — fully admitted owner
  *   bool blocked — uncertain commit, close/reopen required
  *   StoreCommitObserver observer — optional non-reentrant observer
- *   void *observerContext — borrowed observer-owned context
+ *   any observerContext — borrowed observer-owned context
  * FUNCTION REGISTRY (exports):
- *   Store *Store_0(void); Store *Store_1(const char *path);
+ *   Store *Store_0(); Store *Store_1(const char *path);
  *   Store *Store_4(const char *path, bytes reserved, u32 pageSize,
- *                  bytes journalBytes); void Store_free(Store *self);
+ *                  bytes journalBytes); fn Store_free(Store *self);
  *   StoreCode Store_add(Store*, u32, const u8*, u32, u32*);
  *   StoreCode Store_page_write(Store*, u32, u32, const u8*, u32);
  *   StoreCode Store_page_release(Store*, u32);
@@ -60,9 +60,9 @@
  *   u32 Store_pageCount(const Store*); u32 Store_freeHead(const Store*);
  *   bytes Store_reserved(const Store*); bytes Store_journalBytes(const Store*);
  *   u64 Store_sequence(const Store*); u64 Store_exhaustionCount(const Store*);
- *   void Store_setCommitObserver(Store*, StoreCommitObserver, void*);
+ *   fn Store_setCommitObserver(Store*, StoreCommitObserver, any);
  *   StoreCommitObserver Store_getCommitObserver(const Store*);
- *   void *Store_getObserverContext(const Store*); const char *Store_codeName(StoreCode);
+ *   any Store_getObserverContext(const Store*); const char *Store_codeName(StoreCode);
  *   bool Store_toString(const Store*, char*, bytes, bool*);
  *   bool Store_toStringStruct(const Store*, char*, bytes, bool*);
  * PRIVATE (static): read32/read64/put32/put64 native byte copies; reject/full/admit
@@ -85,8 +85,8 @@ static const u8 storeMagic[8] = {'V','E','X','D','B','0','2',0};
 
 static u32 read32(const u8 *p) { u32 v; memcpy(&v, p, sizeof v); return v; }
 static u64 read64(const u8 *p) { u64 v; memcpy(&v, p, sizeof v); return v; }
-static void put32(u8 *p, u32 v) { memcpy(p, &v, sizeof v); }
-static void put64(u8 *p, u64 v) { memcpy(p, &v, sizeof v); }
+static fn put32(u8 *p, u32 v) { memcpy(p, &v, sizeof v); }
+static fn put64(u8 *p, u64 v) { memcpy(p, &v, sizeof v); }
 
 static StoreCode reject(Store *self, StoreCode code, const char *why) {
     if (self != nullptr)
@@ -123,7 +123,7 @@ static bool geometry(bytes reserved, u32 size, bytes journal) {
            (reserved - journal - size) / size <= UINT32_MAX;
 }
 
-Store *Store_0(void) {
+Store *Store_0() {
     Store *self = (Store*) Memory_alloc(TYPE_DB_STORE_SINGLETON, sizeof(Store));
     if (self == nullptr) {
         THROW("Store: owner allocation refused");
@@ -133,7 +133,7 @@ Store *Store_0(void) {
     return self;
 }
 
-void Store_free(Store *self) {
+fn Store_free(Store *self) {
     if (self == nullptr)
         return;
     Wal_free((*self).wal);
@@ -227,7 +227,7 @@ static bool apply(Store *self, const WalRecord *record) {
     return true;
 }
 
-static bool replay(void *context, const WalRecord *record) { return apply((Store*) context, record); }
+static bool replay(any context, const WalRecord *record) { return apply((Store*) context, record); }
 
 Store *Store_4(const char *path, bytes reserved, u32 pageSize, bytes journalBytes) {
     if (path == nullptr || path[0] == '\0' || !geometry(reserved, pageSize, journalBytes)) {
@@ -335,7 +335,7 @@ failure:
     return nullptr;
 }
 
-static void observe(Store *self, unsigned phase) {
+static fn observe(Store *self, unsigned phase) {
     if ((*self).observer != nullptr)
         (*self).observer((*self).observerContext, phase);
 }
@@ -484,14 +484,14 @@ bytes Store_reserved(const Store *self) { return self == nullptr ? 0u : (*self).
 bytes Store_journalBytes(const Store *self) { return self == nullptr ? 0u : (*self).journalBytes; }
 u64 Store_sequence(const Store *self) { return self == nullptr ? 0u : (*self).sequence; }
 u64 Store_exhaustionCount(const Store *self) { return self == nullptr ? 0u : (*self).refusals; }
-void Store_setCommitObserver(Store *self, StoreCommitObserver observer, void *context) {
+fn Store_setCommitObserver(Store *self, StoreCommitObserver observer, any context) {
     if (self != nullptr) {
         (*self).observer = observer;
         (*self).observerContext = context;
     }
 }
 StoreCommitObserver Store_getCommitObserver(const Store *self) { return self == nullptr ? nullptr : (*self).observer; }
-void *Store_getObserverContext(const Store *self) { return self == nullptr ? nullptr : (*self).observerContext; }
+any Store_getObserverContext(const Store *self) { return self == nullptr ? nullptr : (*self).observerContext; }
 const char *Store_codeName(StoreCode code) {
     switch (code) {
         case STORE_OK: return "ok";

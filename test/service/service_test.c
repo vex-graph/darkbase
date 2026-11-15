@@ -1,7 +1,6 @@
 // Owner test for the HeadlessService startup, admin gate and recovery contract.
 
-#include "annotation/annotation.h"
-
+#include "vex.h"
 #include "service/service.h"
 #include "security/password.h"
 #include "security/totp.h"
@@ -41,7 +40,7 @@ static u32 failures;
     } \
 } while (false)
 
-static bool secretStore(void *opaqueContext, const char *service,
+static bool secretStore(any opaqueContext, const char *service,
                         const char *account, const u8 *secret, bytes length) {
     TestSecretContext *context = (TestSecretContext*) opaqueContext;
     if (context == nullptr || service == nullptr || account == nullptr || secret == nullptr ||
@@ -52,7 +51,7 @@ static bool secretStore(void *opaqueContext, const char *service,
     return true;
 }
 
-static bool secretLoad(void *opaqueContext, const char *service,
+static bool secretLoad(any opaqueContext, const char *service,
                        const char *account, u8 *dest, bytes capacity,
                        bytes *outLength) {
     TestSecretContext *context = (TestSecretContext*) opaqueContext;
@@ -66,7 +65,7 @@ static bool secretLoad(void *opaqueContext, const char *service,
     return true;
 }
 
-static bool secretRemove(void *opaqueContext, const char *service,
+static bool secretRemove(any opaqueContext, const char *service,
                          const char *account) {
     TestSecretContext *context = (TestSecretContext*) opaqueContext;
     if (context == nullptr || service == nullptr || account == nullptr)
@@ -81,7 +80,7 @@ static u32 codeAt(const TestSecretContext *context, u64 seconds) {
                      TOTP_DIGITS_DEFAULT, TOTP_STEP_SECONDS_DEFAULT);
 }
 
-int main(void) {
+int main() {
     CHECK(HeadlessService_getPasswordIterations(nullptr) == 0u);
     CHECK(!HeadlessService_setPasswordIterations(nullptr, PASSWORD_ITERATIONS_MIN));
     HeadlessService *emptyService = HeadlessService();

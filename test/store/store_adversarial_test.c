@@ -3,6 +3,8 @@
 // concurrency, external attacker, hardware power-loss, or production readiness claim.
 #define _POSIX_C_SOURCE 200809L
 #define _DARWIN_C_SOURCE 1
+
+#include "vex.h"
 #include "store/store.h"
 #include "nio/mem.h"
 #include <assert.h>
@@ -28,25 +30,25 @@
 static char directory[1024];
 static unsigned fixtureId;
 
-static void fixture(char path[1024]) {
+static fn fixture(char path[1024]) {
     int n = snprintf(path, 1024u, "%s/store-adversarial-%u.vexdb", directory, ++fixtureId);
     assert(n > 0 && n < 1024);
 }
 
-static void writeAt(const char *path, long offset, const void *bytes, bytes length) {
+static fn writeAt(const char *path, long offset, const_any data, bytes length) {
     FILE *file = fopen(path, "r+b.sh");
     assert(file != nullptr);
     assert(fseek(file, offset, SEEK_SET) == 0);
-    assert(fwrite(bytes, 1u, length, file) == length);
+    assert(fwrite(data, 1u, length, file) == length);
     assert(fflush(file) == 0);
     assert(fclose(file) == 0);
 }
 
-static void readAt(const char *path, long offset, void *bytes, bytes length) {
+static fn readAt(const char *path, long offset, any data, bytes length) {
     FILE *file = fopen(path, "rb");
     assert(file != nullptr);
     assert(fseek(file, offset, SEEK_SET) == 0);
-    assert(fread(bytes, 1u, length, file) == length);
+    assert(fread(data, 1u, length, file) == length);
     assert(fclose(file) == 0);
 }
 
@@ -56,7 +58,7 @@ static Store *create(const char *path) {
     return store;
 }
 
-static void committedWalLengthMutation(void) {
+static fn committedWalLengthMutation() {
     char path[1024];
     fixture(path);
     Store *store = create(path);
@@ -82,7 +84,7 @@ static void committedWalLengthMutation(void) {
     assert(unlink(path) == 0);
 }
 
-static void livePageDamageAndRecovery(void) {
+static fn livePageDamageAndRecovery() {
     char path[1024];
     fixture(path);
     Store *store = create(path);
@@ -126,7 +128,7 @@ static void livePageDamageAndRecovery(void) {
     assert(unlink(path) == 0);
 }
 
-static void rejectedReadPreservesOutputs(void) {
+static fn rejectedReadPreservesOutputs() {
     char path[1024];
     fixture(path);
     Store *store = create(path);
@@ -170,7 +172,7 @@ static void rejectedReadPreservesOutputs(void) {
     assert(unlink(path) == 0);
 }
 
-static void malformedBootstrapAdmission(void) {
+static fn malformedBootstrapAdmission() {
     char path[1024];
     fixture(path);
     Store *store = create(path);
@@ -206,7 +208,7 @@ static void malformedBootstrapAdmission(void) {
     assert(unlink(path) == 0);
 }
 
-int main(void) {
+int main() {
     const char *tmp = getenv("TMPDIR");
     int n = snprintf(directory, sizeof directory, "%s/store-adversarial-XXXXXX",
                      tmp != nullptr ? tmp : "/tmp");

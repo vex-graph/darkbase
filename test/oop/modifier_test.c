@@ -6,6 +6,8 @@
 // unknown/duplicate/overlong input with exactly one cold diagnostic, and both
 // projections round-trip. A Modifier is a value record: nothing is allocated,
 // so there is no lifetime to leak.
+
+#include "vex.h"
 #include "oop/modifier.h"
 
 #include <assert.h>
@@ -14,10 +16,10 @@
 #include <unistd.h>
 
 // --- A captured cold diagnostic must be exactly one "[vex]" line. -----------
-// A function type is spelled `typedef Modifier Name(void);` — never
-// `Modifier (*Name)(void)` — because the constructor macro `Modifier(...)`
+// A function type is spelled `typedef Modifier Name();` — never
+// `Modifier (*Name)()` — because the constructor macro `Modifier(...)`
 // would otherwise expand on the `Modifier (` sequence.
-typedef Modifier ModifierProbe(void);
+typedef Modifier ModifierProbe();
 
 static bytes captureProbe(ModifierProbe probe, char *out, bytes cap) {
     FILE *capture = tmpfile();
@@ -25,7 +27,7 @@ static bytes captureProbe(ModifierProbe probe, char *out, bytes cap) {
     assert(fflush(stderr) == 0);
     int saved = dup(STDERR_FILENO);
     assert(saved >= 0 && dup2(fileno(capture), STDERR_FILENO) >= 0);
-    (void) probe();
+    (discard) probe();
     assert(fflush(stderr) == 0);
     assert(dup2(saved, STDERR_FILENO) >= 0);
     close(saved);
@@ -44,34 +46,34 @@ static bytes lineCount(const char *text) {
     return lines;
 }
 
-static Modifier probeNull(void) { return Modifier_parse(nullptr); }
-static Modifier probeUnknown(void) { return Modifier_parse("bogus"); }
-static Modifier probeDuplicate(void) { return Modifier_parse("public public"); }
-static Modifier probeOverlong(void) {
+static Modifier probeNull() { return Modifier_parse(nullptr); }
+static Modifier probeUnknown() { return Modifier_parse("bogus"); }
+static Modifier probeDuplicate() { return Modifier_parse("public public"); }
+static Modifier probeOverlong() {
     return Modifier_parse("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); // 32 bytes
 }
-static Modifier probeApplyUnknown(void) {
+static Modifier probeApplyUnknown() {
     return Modifier_applyToken(Modifier_0(), "bogus");
 }
-static Modifier probeQuiet(void) { return Modifier_parse("public hashed nullable"); }
+static Modifier probeQuiet() { return Modifier_parse("public hashed nullable"); }
 
-static void checkReject(ModifierProbe probe, ModifierCode expected, const char *fragment) {
+static fn checkReject(ModifierProbe probe, ModifierCode expected, const char *fragment) {
     char text[512];
     bytes n = captureProbe(probe, text, sizeof text);
     assert(n > 0u);
     assert(lineCount(text) == 1u);
     assert(strncmp(text, "[vex] ", 6u) == 0);
     assert(strstr(text, fragment) != nullptr);
-    (void) expected;
+    (discard) expected;
 }
 
-static void checkQuiet(ModifierProbe probe) {
+static fn checkQuiet(ModifierProbe probe) {
     char text[512];
     bytes n = captureProbe(probe, text, sizeof text);
     assert(n == 0u);
 }
 
-int main(void) {
+int main() {
     // --- Defaults and constructors -----------------------------------------
     Modifier def = Modifier_0();
     assert(Modifier_equals(def, MODIFIER_DEFAULT));

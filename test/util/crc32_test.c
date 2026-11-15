@@ -1,13 +1,14 @@
 // Owner: darkbase-engine/src/util/crc32.c — reflected IEEE CRC32.
 // Proves the published check vector, incremental equivalence, and empty-span
 // identity; database and WAL owners cover its stored-format call sites.
+
+#include "vex.h"
 #include "util/crc32.h"
 
 #include <assert.h>
-#include <stdint.h>
 #include <string.h>
 
-int main(void) {
+int main() {
     static const u8 vector[] = "123456789";
     assert(Crc32_of(vector, sizeof vector - 1u) == 0xCBF43926u);
 

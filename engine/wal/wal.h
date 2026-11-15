@@ -67,10 +67,10 @@ typedef struct WalRecord {
 
 // Standalone: false stops successfully. Region: false is WAL_INVALID (including
 // on the final record), so a refused redo can never be mistaken for success.
-typedef bool (*WalVisitFn)(void *context, const WalRecord *record);
+typedef bool (*WalVisitFn)(any context, const WalRecord *record);
 
 typedef struct Wal {
-    void *file;              // engine File* owner; void* keeps this header IO-free
+    any file;              // engine File* owner; any keeps this header IO-free
     char path[WAL_PATH_MAX];
     u64 baseSequence;   // last checkpointed sequence, from the header
     u64 sequence;       // highest sequence written or recovered
@@ -91,7 +91,7 @@ typedef struct Wal {
 // `path` and recovers its tail. Invalid constructor arguments return null; file or
 // format failures return an owner whose Wal_code reports the refusal. Wal_3 keeps
 // such an owner closed; Wal_1 retains its legacy open-state behavior.
-Wal *Wal_0(void);
+Wal *Wal_0();
 Wal *Wal_1(const char *path);
 // Existing regular file only; trusted host excludes every alias. No create,
 // resize or checkpoint. Capacity is an explicit finite journal safety bound.
@@ -102,7 +102,7 @@ Wal *Wal_3(const char *path, u64 offset, u64 capacity);
 #define Wal(...) CONSTRUCTOR_DISPATCH(Wal, __VA_ARGS__)
 #define Wal_zero() Wal_0()
 
-void        Wal_free(Wal *self);
+fn        Wal_free(Wal *self);
 bool        Wal_isOpen(const Wal *self);
 const char *Wal_path(const Wal *self);
 WalCode     Wal_code(const Wal *self);
@@ -124,7 +124,7 @@ WalCode Wal_sync(Wal *self);
 // Returns TRUNCATED when the trailing record was dropped, CORRUPT when a complete
 // record failed its checksum.
 WalCode Wal_replay(Wal *self, u8 *scratch, bytes scratchCap,
-                   WalVisitFn visit, void *context);
+                   WalVisitFn visit, any context);
 // Truncate the log once the caller has made the DATA durable. The sequence keeps
 // counting up across a checkpoint; it never restarts.
 WalCode Wal_checkpoint(Wal *self);

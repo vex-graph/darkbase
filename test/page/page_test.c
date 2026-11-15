@@ -4,6 +4,8 @@
 // sealed fields must fail verification, including the page's own ID and the store's
 // page size. That is what makes a misplaced or mis-sized page detectable instead of
 // silently plausible. Storage is a stack buffer; the page owns nothing.
+
+#include "vex.h"
 #include "page/page.h"
 
 #include <assert.h>
@@ -23,7 +25,7 @@ static u32 rawU32(bytes offset) {
 /* Each rejected admission preserves every cached field and every supplied byte.
  * Capture the cold diagnostic as well as its return; normal admission is quiet.
  * External serialization is the contract; racing writes and dead buffers are not. */
-static void checkAdmission(Page *page, PageCode expected, const char *message) {
+static fn checkAdmission(Page *page, PageCode expected, const char *message) {
     Page before;
     u8 bytesBefore[SIZE];
     if (page != nullptr) {
@@ -62,7 +64,7 @@ static void checkAdmission(Page *page, PageCode expected, const char *message) {
         assert(memcmp((*page).bytes, bytesBefore, sizeof bytesBefore) == 0);
 }
 
-static void restoredAdmission(void) {
+static fn restoredAdmission() {
     Page *writer = Page_2(storage, SIZE);
     assert(writer != nullptr);
     u8 payload[SIZE - PAGE_HEADER_BYTES];
@@ -153,7 +155,7 @@ static void restoredAdmission(void) {
     Page_free(bare);
 }
 
-int main(void) {
+int main() {
     restoredAdmission();
     /* Legal page sizes are powers of two inside the advertised range. */
     assert(Page_sizeValid(PAGE_SIZE_MIN) && Page_sizeValid(PAGE_SIZE_DEFAULT));

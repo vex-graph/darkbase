@@ -1,11 +1,7 @@
 #ifndef DARKBASE_OOP_MODIFIER_H
 #define DARKBASE_OOP_MODIFIER_H
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-
-#include "util/constructor.h"
+#include "vex.h"
 
 // oop/modifier.h — the frozen field-modifier keyword set.
 //
@@ -240,14 +236,14 @@ typedef struct Modifier {
 
 // --- Constructors ----------------------------------------------------------
 // Arity-dispatched value constructors; the presets above are the usual entry.
-Modifier Modifier_0(void);
+Modifier Modifier_0();
 Modifier Modifier_3(ModifierAccess access, ModifierProtection protection,
                     ModifierNullability nullability);
 Modifier Modifier_5(ModifierAccess access, ModifierProtection protection,
                     ModifierNullability nullability, bool transient, bool shared);
 // NOTE: like Page(...) and Database(...), this function-like macro expands on
 // any `Modifier (` sequence, so a function-pointer declaration must go through
-// a typedef: `typedef Modifier ModifierFn(void); ModifierFn *fn;`.
+// a typedef: `typedef Modifier ModifierFn(); ModifierFn *fn;`.
 #define Modifier(...) CONSTRUCTOR_DISPATCH(Modifier, __VA_ARGS__)
 #define Modifier_zero() Modifier_0()
 

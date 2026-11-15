@@ -1,10 +1,8 @@
 // darkbase-engine/test/database/database_result_test.c — owner test for database/database_result.c.
 
-#include "annotation/annotation.h"
-
+#include "vex.h"
 #include <stdio.h>
 #include <string.h>
-#include <stdint.h>
 
 #include "engine/oop/darkbase_type.h"
 #include "database/database.h"
@@ -29,7 +27,7 @@
  * STRUCT FIELDS: none — procedural test harness.
  *
  * FUNCTION REGISTRY:
- *   - main(void)
+ *   - main()
  *   - testOwnedPointerList() // owns pointer-list container, borrows row values
  * ============================================================================
  */
@@ -51,7 +49,7 @@ typedef struct Row2 {
 } Row2;
 
 /** Verifies an empty cursor snapshots zero rows and handles null inputs safely. */
-static void testEmptyCursor(void) {
+static fn testEmptyCursor() {
     printf("[1] empty cursor + null-safety\n");
 
     DatabaseResult *r = DatabaseResult();
@@ -62,9 +60,9 @@ static void testEmptyCursor(void) {
     CHECK(DatabaseResult_count(r) == 0u);
     CHECK(DatabaseResult_position(r) == 0u);
 
-    void *row = (void*) (pointer) 1u;
+    any row = (any) (pointer) 1u;
     CHECK(DatabaseResult_next(r, &row) == false);
-    CHECK(row == (void*) (pointer) 1u); // untouched on false
+    CHECK(row == (any) (pointer) 1u); // untouched on false
     CHECK(DatabaseResult_next(r, nullptr) == false);
     CHECK(DatabaseResult_next(nullptr, &row) == false);
 
@@ -79,7 +77,7 @@ static void testEmptyCursor(void) {
 }
 
 /** Verifies cursor iteration, exhaustion, rewind, and borrowed row identity. */
-static void testWalk(void) {
+static fn testWalk() {
     printf("[2] walk an entity's rows dest-last, rewind, no copies\n");
 
     Database *db = Database();
@@ -109,21 +107,21 @@ static void testWalk(void) {
 
     // Each next() yields the exact bound pointer, in insertion order.
     for (u32 i = 0u; i < 8u; i++) {
-        void *got = nullptr;
+        any got = nullptr;
         CHECK(DatabaseResult_next(r, &got));
-        CHECK(got == (void*) &rows[i]);
+        CHECK(got == (any) &rows[i]);
         CHECK((*((Row2*) got)).v == i * 10u);
     }
     CHECK(DatabaseResult_position(r) == 8u);
-    void *past = (void*) (pointer) 2u;
+    any past = (any) (pointer) 2u;
     CHECK(DatabaseResult_next(r, &past) == false);
-    CHECK(past == (void*) (pointer) 2u);
+    CHECK(past == (any) (pointer) 2u);
 
     // Rewind replays the same rows.
     DatabaseResult_rewind(r);
     CHECK(DatabaseResult_position(r) == 0u);
-    void *first = nullptr;
-    CHECK(DatabaseResult_next(r, &first) && first == (void*) &rows[0]);
+    any first = nullptr;
+    CHECK(DatabaseResult_next(r, &first) && first == (any) &rows[0]);
 
     // Selecting an absent entity rejects.
     CHECK(Database_select(db, "ghost") == nullptr);
@@ -135,10 +133,10 @@ static void testWalk(void) {
 }
 
 /** Verifies an owned result list is released without taking row-value ownership. */
-static void testOwnedPointerList(void) {
+static fn testOwnedPointerList() {
     printf("[3] owned match-list container, borrowed row values\n");
     ChunkedList *rows = ChunkedList_3(ID_DB_DATABASE_ROW,
-        (u32) sizeof(void*), 256u);
+        (u32) sizeof(any), 256u);
     Row2 row = {77u};
     CHECK(rows != nullptr);
     if (rows == nullptr)
@@ -149,11 +147,11 @@ static void testOwnedPointerList(void) {
         ChunkedList_free(rows);
         return;
     }
-    *((void**) slot) = &row;
+    *((any*) slot) = &row;
     DatabaseResult *result = DatabaseResult_2(rows, true);
     CHECK(result != nullptr);
     if (result != nullptr) {
-        void *found = nullptr;
+        any found = nullptr;
         CHECK(DatabaseResult_next(result, &found) && found == &row);
         DatabaseResult_free(result);
         CHECK(row.v == 77u); // freeing result only releases its pointer-list container
@@ -163,7 +161,7 @@ static void testOwnedPointerList(void) {
 }
 
 /** Verifies cursor string projections and bounded-buffer behavior. */
-static void testStrings(void) {
+static fn testStrings() {
     printf("[4] string projections\n");
 
     DatabaseResult *r = DatabaseResult();
@@ -185,7 +183,7 @@ static void testStrings(void) {
     DatabaseResult_free(r);
 }
 
-int main(void) {
+int main() {
     printf("=== DatabaseResult Test Suite ===\n\n");
 
     testEmptyCursor();

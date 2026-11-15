@@ -16,6 +16,8 @@
 // Gaps: OS write/fsync failure injection, actual power-loss durability, hostile
 // aliases (excluded by contract), other platforms, and legal host concurrency
 // (all operations require external serialization, no internal concurrency claim).
+
+#include "vex.h"
 #include "wal/wal.h"
 #include "util/crc32.h"
 #include "nio/mem.h"
@@ -35,8 +37,8 @@ static u8 seenPayload[RECORDS][64];
 static u32 seenLength[RECORDS];
 static u32 seenCount = 0u;
 
-static bool collect(void *context, const WalRecord *record) {
-    (void) context;
+static bool collect(any context, const WalRecord *record) {
+    (discard) context;
     assert(seenCount < RECORDS);
     seenOps[seenCount] = (*record).op;
     seenSeq[seenCount] = (*record).sequence;
@@ -48,44 +50,44 @@ static bool collect(void *context, const WalRecord *record) {
 }
 
 static u32 stopCalls = 0u;
-static bool stopAfterOne(void *context, const WalRecord *record) {
-    (void) context;
+static bool stopAfterOne(any context, const WalRecord *record) {
+    (discard) context;
     assert((*record).sequence == 1u);   // it was handed the FIRST record, then stopped
     ++stopCalls;
     return false;   // the visitor may stop the walk; the log itself is still intact
 }
 
-static void resetSeen(void) { seenCount = 0u; memset(seenPayload, 0, sizeof seenPayload); }
+static fn resetSeen() { seenCount = 0u; memset(seenPayload, 0, sizeof seenPayload); }
 
-static void makePath(void) {
+static fn makePath() {
     const char *dir = getenv("TMPDIR");
-    (void) snprintf(path, sizeof path, "%s/re-wal-%d.log", dir != nullptr ? dir : "/tmp", (int) getpid());
-    (void) unlink(path);
+    (discard) snprintf(path, sizeof path, "%s/re-wal-%d.log", dir != nullptr ? dir : "/tmp", (int) getpid());
+    (discard) unlink(path);
 }
 
 /* Overwrite bytes at an absolute offset without going through the log. */
-static void poke(bytes offset, const u8 *bytes, bytes length) {
+static fn poke(bytes offset, const u8 *data, bytes length) {
     FILE *f = fopen(path, "r+b.sh");
     assert(f != nullptr);
     assert(fseek(f, (long) offset, SEEK_SET) == 0);
-    assert(fwrite(bytes, 1, length, f) == length);
+    assert(fwrite(data, 1, length, f) == length);
     assert(fclose(f) == 0);
 }
 
 /* Append raw bytes at the end, as a crash mid-append would leave them. */
-static void appendRaw(const u8 *bytes, bytes length) {
+static fn appendRaw(const u8 *data, bytes length) {
     FILE *f = fopen(path, "ab");
     assert(f != nullptr);
-    assert(fwrite(bytes, 1, length, f) == length);
+    assert(fwrite(data, 1, length, f) == length);
     assert(fclose(f) == 0);
 }
 
-static long fileSize(void) {
+static long fileSize() {
     FILE *f = fopen(path, "rb");
     assert(f != nullptr);
     assert(fseek(f, 0, SEEK_END) == 0);
     long size = ftell(f);
-    (void) fclose(f);
+    (discard) fclose(f);
     return size;
 }
 
@@ -93,31 +95,31 @@ static long fileSize(void) {
 #define REGION_CAPACITY 256u
 #define REGION_FILE_BYTES 512u
 
-static void regionFile(void) {
+static fn regionFile() {
     FILE *f = fopen(path, "wb");
     assert(f != nullptr);
-    u8 bytes[REGION_FILE_BYTES] = {0};
-    memset(bytes, 0x5a, REGION_OFFSET);
-    memset(bytes + REGION_OFFSET + REGION_CAPACITY, 0x6b,
+    u8 raw[REGION_FILE_BYTES] = {0};
+    memset(raw, 0x5a, REGION_OFFSET);
+    memset(raw + REGION_OFFSET + REGION_CAPACITY, 0x6b,
            REGION_FILE_BYTES - REGION_OFFSET - REGION_CAPACITY);
-    assert(fwrite(bytes, 1u, sizeof bytes, f) == sizeof bytes);
+    assert(fwrite(raw, 1u, sizeof raw, f) == sizeof raw);
     assert(fclose(f) == 0);
 }
 
-static void regionGuards(void) {
+static fn regionGuards() {
     FILE *f = fopen(path, "rb");
     assert(f != nullptr);
-    u8 bytes[REGION_FILE_BYTES];
-    assert(fread(bytes, 1u, sizeof bytes, f) == sizeof bytes);
+    u8 raw[REGION_FILE_BYTES];
+    assert(fread(raw, 1u, sizeof raw, f) == sizeof raw);
     assert(fclose(f) == 0);
     for (bytes i = 0u; i < REGION_OFFSET; ++i)
-        assert(bytes[i] == 0x5a);
-    for (bytes i = REGION_OFFSET + REGION_CAPACITY; i < sizeof bytes; ++i)
-        assert(bytes[i] == 0x6b);
+        assert(raw[i] == 0x5a);
+    for (bytes i = REGION_OFFSET + REGION_CAPACITY; i < sizeof raw; ++i)
+        assert(raw[i] == 0x6b);
     assert(fileSize() == REGION_FILE_BYTES);
 }
 
-static void regionCases(void) {
+static fn regionCases() {
     makePath();
     Wal *missing = Wal_3(path, REGION_OFFSET, REGION_CAPACITY);
     assert(missing != nullptr && !Wal_isOpen(missing) && Wal_code(missing) == WAL_IO);
@@ -299,7 +301,7 @@ static void regionCases(void) {
     assert(unlink(path) == 0);
 }
 
-int main(void) {
+int main() {
     /* An unopened owner is CLOSED on every operation; arguments are a different code. */
     Wal *closed = Wal_0();
     assert(closed != nullptr && !Wal_isOpen(closed));
@@ -428,7 +430,7 @@ int main(void) {
         assert(f != nullptr);
         assert(fseek(f, (long) (WAL_HEADER_BYTES + WAL_RECORD_FIXED), SEEK_SET) == 0);
         assert(fread(flipped, 1, 1, f) == 1u);
-        (void) fclose(f);
+        (discard) fclose(f);
     }
     flipped[0] ^= 0x5Au;
     poke(WAL_HEADER_BYTES + WAL_RECORD_FIXED, flipped, 1u);

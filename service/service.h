@@ -1,29 +1,25 @@
 #ifndef DARKBASE_HEADLESS_SERVICE_SERVICE_H
 #define DARKBASE_HEADLESS_SERVICE_SERVICE_H
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-
-#include "util/constructor.h"
+#include "vex.h"
 
 typedef struct HeadlessService HeadlessService;
 
-typedef bool (*HeadlessSecretStoreFn)(void *context, const char *service,
+typedef bool (*HeadlessSecretStoreFn)(any context, const char *service,
                                       const char *account, const u8 *secret,
                                       bytes secretLength);
-typedef bool (*HeadlessSecretLoadFn)(void *context, const char *service,
+typedef bool (*HeadlessSecretLoadFn)(any context, const char *service,
                                      const char *account, u8 *dest,
                                      bytes capacity, bytes *outLength);
-typedef bool (*HeadlessSecretRemoveFn)(void *context, const char *service,
+typedef bool (*HeadlessSecretRemoveFn)(any context, const char *service,
                                        const char *account);
 
-HeadlessService *HeadlessService_0(void);
+HeadlessService *HeadlessService_0();
 HeadlessService *HeadlessService_1(const char *databasePath);
 #define HeadlessService(...) CONSTRUCTOR_DISPATCH(HeadlessService, __VA_ARGS__)
 #define HeadlessService_zero() HeadlessService_0()
 
-void HeadlessService_free(HeadlessService *self);
+fn HeadlessService_free(HeadlessService *self);
 
 // Opens the service-owned database, registering its private admin row schema
 // before load. A missing file bootstraps the one-time admin/Password123! account
@@ -32,7 +28,7 @@ void HeadlessService_free(HeadlessService *self);
 // fallback is permitted. The callbacks and context are borrowed until free.
 bool HeadlessService_start(HeadlessService *self, HeadlessSecretStoreFn store,
                            HeadlessSecretLoadFn load, HeadlessSecretRemoveFn remove,
-                            void *context, char *outSetupSecret,
+                            any context, char *outSetupSecret,
                             bytes secretCapacity,
                            bytes *outSecretLength);
 

@@ -127,7 +127,7 @@ def main():
                 run(["/usr/bin/leaks", "-quiet", "-atExit", "--", binary, "--leak-safe"], timeout=60)
         for arity in (2, 3):
             args = ",".join(["0"] * arity)
-            source = f'#include "store/store.h"\nvoid probe(void) {{ (void) Store({args}); }}\n'
+            source = f'#include "store/store.h"\nfn probe() {{ () Store({args}); }}\n'
             result = subprocess.run(["clang", "-std=gnu23", "-Wall", "-Wextra", "-Werror",
                                      "-fsyntax-only", "-x", "c", "-", "-I" + str(DB / "src"),
                                      "-I" + str(CPU / "src"), "-I" + str(ENGINE / "src"),

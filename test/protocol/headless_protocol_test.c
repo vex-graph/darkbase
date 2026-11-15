@@ -1,5 +1,7 @@
 // HeadlessProtocol owner: byte-level wire oracle, adversarial framing and recovery.
 // No sockets or credentials; borrowed spans are live/disjoint, calls serialized.
+
+#include "vex.h"
 #include "protocol/headless_protocol.h"
 #include <assert.h>
 #include <stdio.h>
@@ -10,7 +12,7 @@ static unsigned diagnostics;
 #define REFUSES(expression) do { ++diagnostics; assert(!(expression)); } while (false)
 
 // Known byte oracle, all stream splits, retained tail, request/response and busy.
-static void roundtrip(void) {
+static fn roundtrip() {
     const u8 payload[] = {0u, 255u, 's', 'e', 'c', 'r', 'e', 't'};
     const u8 golden[] = {20,0,0,0, 1,0, 1,0, 2,0, 0,0, 4,3,2,1,
                               0,255,'s','e','c','r','e','t'};
@@ -71,7 +73,7 @@ static void roundtrip(void) {
 }
 
 // Every truncation, each header constraint, explicit terminal latch and reset.
-static void hostile(void) {
+static fn hostile() {
     u8 encoded[64], backing[64];
     bytes length, used;
     bool truncated;
@@ -121,7 +123,7 @@ static void hostile(void) {
 }
 
 // Exact protocol maximum with full payload comparison and canary; output atomicity.
-static void boundaries(void) {
+static fn boundaries() {
     static u8 payload[HEADLESS_WIRE_MAX_BYTES];
     static u8 encoded[HEADLESS_WIRE_MAX_BYTES + 1u];
     static u8 backing[HEADLESS_WIRE_MAX_BYTES + 1u];
@@ -158,7 +160,7 @@ static void boundaries(void) {
 }
 
 // Null/defaults, API misuse preservation, every public constructor/projection.
-static void defaults(void) {
+static fn defaults() {
     u8 backing[64];
     bytes used = SIZE_MAX, length;
     bool truncated;
@@ -221,7 +223,7 @@ static void defaults(void) {
     assert(HeadlessProtocol_toString(&protocol, text, sizeof text, nullptr));
 }
 
-int main(void) {
+int main() {
     FILE *capture = tmpfile();
     assert(capture != nullptr);
     int saved = dup(STDERR_FILENO);

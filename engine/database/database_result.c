@@ -59,7 +59,7 @@
  * Allocates an empty cursor with no row source; returns nullptr if allocation
  * fails.
  */
-DatabaseResult *DatabaseResult_0(void) {
+DatabaseResult *DatabaseResult_0() {
     DatabaseResult *self = (DatabaseResult*) Memory_alloc(TYPE_DB_DATABASE_RESULT_SINGLETON, sizeof(DatabaseResult));
     if (self == nullptr)
         return nullptr;
@@ -97,7 +97,7 @@ DatabaseResult *DatabaseResult_2(ChunkedList *source, bool ownsSource) {
  * Releases the cursor and its list container only when ownsRows is set; row
  * values are always borrowed.
  */
-void DatabaseResult_free(DatabaseResult *self) {
+fn DatabaseResult_free(DatabaseResult *self) {
     if (self != nullptr) {
         if ((*self).ownsRows != 0u)
             ChunkedList_free((*self).rows);
@@ -113,7 +113,7 @@ void DatabaseResult_free(DatabaseResult *self) {
 u64 DatabaseResult_kind(const DatabaseResult *self) {
     if (self == nullptr)
         return 0u;
-    return Memory_type((void*) self);
+    return Memory_type((any) self);
 }
 
 /**
@@ -122,7 +122,7 @@ u64 DatabaseResult_kind(const DatabaseResult *self) {
 bool DatabaseResult_check(const DatabaseResult *self, u64 typeId) {
     if (self == nullptr)
         return false;
-    return Memory_type((void*) self) == typeId;
+    return Memory_type((any) self) == typeId;
 }
 
 /**
@@ -130,7 +130,7 @@ bool DatabaseResult_check(const DatabaseResult *self, u64 typeId) {
  * returns false at exhaustion or for invalid/unavailable arguments without
  * changing the cursor or destination.
  */
-bool DatabaseResult_next(DatabaseResult *self, void **outRow) {
+bool DatabaseResult_next(DatabaseResult *self, any *outRow) {
     if (self == nullptr || outRow == nullptr || (*self).rows == nullptr)
         return false;
     u32 index = (*self).cursor;
@@ -140,7 +140,7 @@ bool DatabaseResult_next(DatabaseResult *self, void **outRow) {
     if (slot == nullptr)
         return false;
     (*self).cursor = index + 1u;
-    *outRow = *(void**) slot;
+    *outRow = *(any*) slot;
     return true;
 }
 
@@ -161,7 +161,7 @@ u32 DatabaseResult_position(const DatabaseResult *self) {
 /**
  * Resets a non-null cursor to the first row; a null cursor is ignored.
  */
-void DatabaseResult_rewind(DatabaseResult *self) {
+fn DatabaseResult_rewind(DatabaseResult *self) {
     if (self != nullptr)
         (*self).cursor = 0u;
 }
@@ -172,7 +172,7 @@ void DatabaseResult_rewind(DatabaseResult *self) {
  * Formats a bounded cursor-position summary; null self formats as "nullptr"
  * and truncation is reported through outTruncated when supplied.
  */
-void DatabaseResult_toString(const DatabaseResult *self, char *dest, bytes cap, bool *outTruncated) {
+fn DatabaseResult_toString(const DatabaseResult *self, char *dest, bytes cap, bool *outTruncated) {
     if (outTruncated)
         *outTruncated = false;
     if (dest == nullptr || cap == 0u)
@@ -192,7 +192,7 @@ void DatabaseResult_toString(const DatabaseResult *self, char *dest, bytes cap, 
  * Formats the cursor's own fields into a bounded structure summary; null self
  * formats as "nullptr" and truncation is reported when possible.
  */
-void DatabaseResult_toStringStruct(const DatabaseResult *self, char *dest, bytes cap, bool *outTruncated) {
+fn DatabaseResult_toStringStruct(const DatabaseResult *self, char *dest, bytes cap, bool *outTruncated) {
     if (outTruncated)
         *outTruncated = false;
     if (dest == nullptr || cap == 0u)

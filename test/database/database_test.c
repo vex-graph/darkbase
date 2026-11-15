@@ -1,11 +1,9 @@
 // darkbase-engine/test/database/database_test.c — owner test for database/database.c.
 
-#include "annotation/annotation.h"
-
+#include "vex.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
 #include <unistd.h>
 #include <sys/wait.h>
 
@@ -41,7 +39,7 @@
  *   - testPageStoreRecovery() // public Database recovery after child exit
  *   - testStructuredEqualityQuery() // raw equality, signed range cursors and the declared int32 index
  *   - testPersistedIndex() // persisted index roundtrip and same-stride schema drift
- *   - main(void) // all existing Database and persistence owners
+ *   - main() // all existing Database and persistence owners
  * CONTRACT: test-owned files are disposable; the recovery child is bounded by
  * the runner watchdog and exits without relying on normal process teardown.
  * ============================================================================
@@ -55,7 +53,7 @@ typedef struct DatabaseCrashProbe {
 } DatabaseCrashProbe;
 
 /** Terminates after the root redo marker is durable but before page apply. */
-static void crashAtDatabaseRoot(void *context, unsigned phase) {
+static fn crashAtDatabaseRoot(any context, unsigned phase) {
     DatabaseCrashProbe *probe = (DatabaseCrashProbe*) context;
     if (phase == STORE_AFTER_LOG_SYNC && ++(*probe).commits == 3u)
         _exit(77);
@@ -76,7 +74,7 @@ typedef struct Row {
 } Row;
 
 /** Verifies database construction, type identity, null-safe access, and destruction. */
-static void testConstructorAndNull(void) {
+static fn testConstructorAndNull() {
     printf("[1] construction, identity, null-safety\n");
 
     Database *db = Database();
@@ -107,7 +105,7 @@ static void testConstructorAndNull(void) {
 }
 
 /** Verifies entity registration, case-folded lookup, duplicate rejection, and cleanup. */
-static void testDefineAndLookup(void) {
+static fn testDefineAndLookup() {
     printf("[2] define entities, index/count/schema lookups\n");
 
     Database *db = Database();
@@ -144,7 +142,7 @@ static void testDefineAndLookup(void) {
 }
 
 /** Verifies borrowed row insertion, stable indexed reads, growth, and rejected inserts. */
-static void testInsertAndRead(void) {
+static fn testInsertAndRead() {
     printf("[3] bind live rows, read them back, stable across growth\n");
 
     Database *db = Database();
@@ -170,11 +168,11 @@ static void testInsertAndRead(void) {
     CHECK(Database_errorCode(db) == DATABASE_OK);
 
     // The exact bound pointer comes back, at its index.
-    void *got = Database_row(db, "player", 37u);
-    CHECK(got == (void*) &rows[37]);
+    any got = Database_row(db, "player", 37u);
+    CHECK(got == (any) &rows[37]);
     CHECK((*((Row*) got)).id == 137u);
     CHECK(Database_row(db, "player", 64u) == nullptr); // out of range
-    CHECK(Database_row(db, "player", 0u) == (void*) &rows[0]);
+    CHECK(Database_row(db, "player", 0u) == (any) &rows[0]);
 
     // Absent entity + null argument rejection.
     CHECK(Database_insert(db, "ghost", &rows[0]) == -1);
@@ -187,7 +185,7 @@ static void testInsertAndRead(void) {
 }
 
 /** Verifies owned copy-in stride checks and the entity-wide ownership mode. */
-static void testInsertOwned(void) {
+static fn testInsertOwned() {
     printf("[4] owned row copy-in, exact stride, and per-entity ownership\n");
 
     Database *db = Database();
@@ -239,7 +237,7 @@ static void testInsertOwned(void) {
 }
 
 /** Verifies recorded database errors and bounded value/structure projections. */
-static void testDiagnostics(void) {
+static fn testDiagnostics() {
     printf("[4] recorded rejection is legible and bounded\n");
 
     Database *db = Database();
@@ -273,7 +271,7 @@ static void testDiagnostics(void) {
 }
 
 /** Verifies save/load round trips, loaded-row ownership, and corrupt-file rejection. */
-static void testPersistence(void) {
+static fn testPersistence() {
     printf("[5] .vexdb save/load round-trip, ownership, checksum, atomicity\n");
 
     const char *tmp = getenv("TMPDIR");
@@ -378,7 +376,7 @@ static void testPersistence(void) {
 }
 
 /** Verifies atomic save replacement and preservation of the previous file on rejection. */
-static void testSafeSave(void) {
+static fn testSafeSave() {
     printf("[6] atomic save publication (temp write + fsync + rename)\n");
 
     const char *tmp = getenv("TMPDIR");
@@ -461,7 +459,7 @@ static void testSafeSave(void) {
 }
 
 /** Verifies reflection rows publish through Store and load after a real reopen. */
-static void testPageStorePersistence(void) {
+static fn testPageStorePersistence() {
     printf("[7] page-store database persistence and reopen\n");
     const char *tmp = getenv("TMPDIR");
     if (tmp == nullptr)
@@ -570,7 +568,7 @@ static void testPageStorePersistence(void) {
         DatabaseResult *query = Database_queryEqual(db, "player", "id",
                                                      &wanted, sizeof(wanted));
         CHECK(query != nullptr && DatabaseResult_count(query) == 1u);
-        void *queriedRow = nullptr;
+        any queriedRow = nullptr;
         CHECK(query != nullptr && DatabaseResult_next(query, &queriedRow));
         CHECK(queriedRow != nullptr && (*((Row*) queriedRow)).id == wanted);
         DatabaseResult_free(query);
@@ -588,7 +586,7 @@ static void testPageStorePersistence(void) {
 }
 
 /** Proves the public Database image is recovered from a torn root-page commit. */
-static void testPageStoreRecovery(void) {
+static fn testPageStoreRecovery() {
     printf("[8] page-store database root recovery after process exit\n");
     const char *tmp = getenv("TMPDIR");
     if (tmp == nullptr)
@@ -650,7 +648,7 @@ static void testPageStoreRecovery(void) {
 }
 
 /** Verifies structured equality uses reflected byte spans and returns matching rows. */
-static void testStructuredEqualityQuery(void) {
+static fn testStructuredEqualityQuery() {
     printf("[9] reflected raw-byte equality query and cursor\n");
     Database *db = Database();
     Struct *schema = Struct("player");
@@ -693,8 +691,8 @@ static void testStructuredEqualityQuery(void) {
                                                    &wanted, sizeof(wanted));
     CHECK(matches != nullptr && DatabaseResult_count(matches) == 2u);
     if (matches != nullptr) {
-        void *first = nullptr;
-        void *second = nullptr;
+        any first = nullptr;
+        any second = nullptr;
         CHECK(DatabaseResult_next(matches, &first));
         CHECK(DatabaseResult_next(matches, &second));
         CHECK((*((Row*) first)).health == 11 && (*((Row*) second)).health == 17);
@@ -719,8 +717,8 @@ static void testStructuredEqualityQuery(void) {
     DatabaseResult *range = Database_queryInt32Range(db, "player", "health", 13, 17);
     CHECK(range != nullptr && DatabaseResult_count(range) == 2u);
     if (range != nullptr) {
-        void *low = nullptr;
-        void *high = nullptr;
+        any low = nullptr;
+        any high = nullptr;
         CHECK(DatabaseResult_next(range, &low) && (*((Row*) low)).health == 13);
         CHECK(DatabaseResult_next(range, &high) && (*((Row*) high)).health == 17);
         CHECK(!DatabaseResult_next(range, &low));
@@ -755,8 +753,8 @@ static void testStructuredEqualityQuery(void) {
     range = Database_queryInt32Range(db, "player", "health", 13, 17);
     CHECK(range != nullptr && DatabaseResult_count(range) == 2u);
     if (range != nullptr) {
-        void *first = nullptr;
-        void *second = nullptr;
+        any first = nullptr;
+        any second = nullptr;
         CHECK(DatabaseResult_next(range, &first) && (*((Row*) first)).health == 13);
         CHECK(DatabaseResult_next(range, &second) && (*((Row*) second)).health == 17);
         CHECK(!DatabaseResult_next(range, &first));
@@ -771,7 +769,7 @@ static void testStructuredEqualityQuery(void) {
     range = Database_queryInt32Range(db, "player", "health", 13, 17);
     CHECK(range != nullptr && DatabaseResult_count(range) == 3u);
     if (range != nullptr) {
-        void *row = nullptr;
+        any row = nullptr;
         CHECK(DatabaseResult_next(range, &row) && (*((Row*) row)).health == 13);
         CHECK(DatabaseResult_next(range, &row) && (*((Row*) row)).health == 14);
         CHECK(DatabaseResult_next(range, &row) && (*((Row*) row)).health == 17);
@@ -795,7 +793,7 @@ static void testStructuredEqualityQuery(void) {
     CHECK(span.code == DATABASE_OK && span.offset == (u32) offsetof(Row, health));
     span = Database_fieldSpan(db, "player", "id");
     CHECK(span.code == DATABASE_OK);
-    void *freshRow = Database_row(db, "player", 0u);
+    any freshRow = Database_row(db, "player", 0u);
     CHECK(freshRow != nullptr);
     if (freshRow != nullptr && span.code == DATABASE_OK) {
         u32 id = 0u;
@@ -817,7 +815,7 @@ static void testStructuredEqualityQuery(void) {
 }
 
 /** Verifies the declared int32 index survives a save/reopen through the Store. */
-static void testPersistedIndex(void) {
+static fn testPersistedIndex() {
     printf("[10] persisted int32 index roundtrip and schema drift\n");
     const char *tmp = getenv("TMPDIR");
     if (tmp == nullptr)
@@ -897,7 +895,7 @@ static void testPersistedIndex(void) {
         DatabaseResult *range = Database_queryInt32Range(db, "scores", "health", 20, 40);
         CHECK(range != nullptr && DatabaseResult_count(range) == 3u);
         if (range != nullptr) {
-            void *row = nullptr;
+            any row = nullptr;
             CHECK(DatabaseResult_next(range, &row) && (*((Row*) row)).health == 20);
             CHECK(DatabaseResult_next(range, &row) && (*((Row*) row)).health == 30);
             CHECK(DatabaseResult_next(range, &row) && (*((Row*) row)).health == 40);
@@ -944,7 +942,7 @@ static void testPersistedIndex(void) {
     remove(path);
 }
 
-int main(void) {
+int main() {
     printf("=== Database Test Suite ===\n\n");
 
     testConstructorAndNull();

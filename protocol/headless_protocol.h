@@ -44,7 +44,7 @@ typedef struct HeadlessProtocol {
 
 // _0 is closed. _2 borrows disjoint writable storage, 16..65536 bytes.
 // External serialization; buffer and all payload borrows must outlive use.
-HeadlessProtocol HeadlessProtocol_0(void);
+HeadlessProtocol HeadlessProtocol_0();
 HeadlessProtocol HeadlessProtocol_2(u8 *buffer, bytes capacity);
 #define HeadlessProtocol(...) CONSTRUCTOR_DISPATCH(HeadlessProtocol, __VA_ARGS__)
 #define HeadlessProtocol_zero() HeadlessProtocol_0()
@@ -52,13 +52,13 @@ HeadlessProtocol HeadlessProtocol_2(u8 *buffer, bytes capacity);
 // At most one frame admitted. Stops exactly at its end; caller retains any tail.
 // false: inspect code. Malformed/oversize/EOF latch failed until reset. Busy and
 // invalid API arguments preserve admitted state. Input must not alias backing.
-bool HeadlessProtocol_feed(HeadlessProtocol *self, const u8 *bytes,
+bool HeadlessProtocol_feed(HeadlessProtocol *self, const u8 *data,
                            bytes length, bytes *outConsumed);
 bool HeadlessProtocol_finish(HeadlessProtocol *self);
 // release requires ready and ends payload borrows; reset abandons any frame,
 // clears refusal epoch and scrubs used bytes. Neither closes the host transport.
 bool HeadlessProtocol_release(HeadlessProtocol *self);
-void HeadlessProtocol_reset(HeadlessProtocol *self);
+fn HeadlessProtocol_reset(HeadlessProtocol *self);
 bool HeadlessProtocol_isReady(const HeadlessProtocol *self);
 bool HeadlessProtocol_isFailed(const HeadlessProtocol *self);
 u32 HeadlessProtocol_getCode(const HeadlessProtocol *self);

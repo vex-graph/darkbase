@@ -50,7 +50,7 @@
 /** ========================================================================
  * CLASS: Wal (wal/wal.c)
  * STRUCT FIELDS (Mirroring wal/wal.h)
- *   void *file            engine File* owner (void* keeps this header IO-free)
+ *   any file            engine File* owner (any keeps this header IO-free)
  *   char path[1024]       the log's path, copied from the caller
  *   u64 baseSequence highest sequence that a checkpoint has retired
  *   u64 sequence     highest sequence written or recovered
@@ -74,9 +74,9 @@
  *               prefix20 at offset8, payload at28, CRC at28 + payload length.
  *               total record bytes = 32 + payload length; header occupies 24B.
  * FUNCTION REGISTRY (exports)
- *   Constructors: Wal *Wal_0(void), Wal *Wal_1(const char *path)
+ *   Constructors: Wal *Wal_0(), Wal *Wal_1(const char *path)
  *                 Wal *Wal_3(const char *path, u64 offset, u64 capacity)
- *   Lifecycle:    void Wal_free(Wal *self)
+ *   Lifecycle:    fn Wal_free(Wal *self)
  *                 bool Wal_isOpen(const Wal *self)
  *                 const char *Wal_path(const Wal *self)
  *                 WalCode Wal_code(const Wal *self)
@@ -84,7 +84,7 @@
  *                   const u8 *payload, u32 length, u64 *outSequence)
  *   Durability:   WalCode Wal_sync(Wal *self), WalCode Wal_checkpoint(Wal *self)
  *   Recovery:     WalCode Wal_replay(Wal *self, u8 *scratch, bytes scratchCap,
- *                   WalVisitFn visit, void *context)
+ *                   WalVisitFn visit, any context)
  *   Queries:      u64 Wal_sequence(const Wal *self)
  *                 u64 Wal_baseSequence(const Wal *self)
  *                 u32 Wal_count(const Wal *self)
@@ -126,14 +126,14 @@
 
 #define WAL_READ_CHUNK 4096u
 
-static void putU32(u8 *out, u32 value) {
+static fn putU32(u8 *out, u32 value) {
     out[0] = (u8) value;
     out[1] = (u8) (value >> 8);
     out[2] = (u8) (value >> 16);
     out[3] = (u8) (value >> 24);
 }
 
-static void putU64(u8 *out, u64 value) {
+static fn putU64(u8 *out, u64 value) {
     for (unsigned i = 0u; i < 8u; i++)
         out[i] = (u8) (value >> (i * 8u));
 }
@@ -150,7 +150,7 @@ static u64 getU64(const u8 *in) {
     return value;
 }
 
-static bool readExact(File *file, void *dest, bytes length) {
+static bool readExact(File *file, any dest, bytes length) {
     u8 *p = (u8*) dest;
     bytes done = 0u;
     while (done < length) {
@@ -162,7 +162,7 @@ static bool readExact(File *file, void *dest, bytes length) {
     return true;
 }
 
-static bool writeExact(File *file, const void *src, bytes length) {
+static bool writeExact(File *file, const_any src, bytes length) {
     const u8 *p = (const u8*) src;
     bytes done = 0u;
     while (done < length) {
@@ -185,7 +185,7 @@ static bool syncFile(Wal *self) {
 #endif
 }
 
-static void encodeHeader(const Wal *self, u8 out[WAL_HEADER_BYTES]) {
+static fn encodeHeader(const Wal *self, u8 out[WAL_HEADER_BYTES]) {
     putU32(&out[0], WAL_MAGIC);
     out[4] = (u8) ((*self).region ? WAL_REGION_VERSION : WAL_VERSION);
     out[5] = 0u;
@@ -237,7 +237,7 @@ static WalCode scanHeader(Wal *self) {
  * the previous one exactly, because a gap means the order cannot be trusted.
  */
 static WalCode scanRecords(Wal *self, u8 *scratch, bytes scratchCap,
-                           WalVisitFn visit, void *context, bool adopt) {
+                           WalVisitFn visit, any context, bool adopt) {
     File *file = (File*) (*self).file;
     u64 expected = (*self).baseSequence;
     u32 seen = 0u;
@@ -313,15 +313,15 @@ static WalCode scanRecords(Wal *self, u8 *scratch, bytes scratchCap,
     return (*self).tailTorn ? WAL_TRUNCATED : WAL_OK;
 }
 
-static bool regionRead(Wal *self, u64 at, void *dest, bytes size) {
+static bool regionRead(Wal *self, u64 at, any dest, bytes size) {
     return at <= (*self).capacity && size <= (*self).capacity - at &&
            File_seek((File*) (*self).file, (int64_t) ((*self).offset + at)) &&
            readExact((File*) (*self).file, dest, size);
 }
 
-static bool zeroBytes(const u8 *bytes, bytes size) {
+static bool zeroBytes(const u8 *data, bytes size) {
     for (bytes i = 0u; i < size; ++i)
-        if (bytes[i] != 0u)
+        if (data[i] != 0u)
             return false;
     return true;
 }
@@ -329,7 +329,7 @@ static bool zeroBytes(const u8 *bytes, bytes size) {
 // This walk never publishes its cursor except during initial open. A missing
 // marker is an uncommitted tail, not a redo intent. A present marker requires CRC.
 static WalCode scanRegion(Wal *self, u8 *scratch, bytes cap,
-                          WalVisitFn visit, void *context, bool adopt) {
+                          WalVisitFn visit, any context, bool adopt) {
     u64 at = WAL_HEADER_BYTES;
     u64 expected = (*self).baseSequence;
     u32 seen = 0u;
@@ -344,13 +344,13 @@ static WalCode scanRegion(Wal *self, u8 *scratch, bytes cap,
         if (zeroBytes(marker, n)) {
             // Zero publication marker means no committed record, regardless of
             // untrusted body bytes. Distinguish pristine space from a torn body.
-            u8 bytes[WAL_READ_CHUNK];
+            u8 chunk[WAL_READ_CHUNK];
             for (u64 pos = at + n; pos < (*self).capacity;) {
-                bytes take = (*self).capacity - pos < sizeof bytes ?
-                              (bytes) ((*self).capacity - pos) : sizeof bytes;
-                if (!regionRead(self, pos, bytes, take))
+                bytes take = (*self).capacity - pos < sizeof chunk ?
+                              (bytes) ((*self).capacity - pos) : sizeof chunk;
+                if (!regionRead(self, pos, chunk, take))
                     return WAL_IO;
-                if (!zeroBytes(bytes, take)) {
+                if (!zeroBytes(chunk, take)) {
                     (*self).tailTorn = true;
                     break;
                 }
@@ -376,13 +376,13 @@ static WalCode scanRegion(Wal *self, u8 *scratch, bytes cap,
             return WAL_CORRUPT;
         u32 crc = Crc32_update(CRC32_SEED, prefix, sizeof prefix);
         for (u32 pos = 0u; pos < length;) {
-            u8 bytes[WAL_READ_CHUNK];
-            bytes take = length - pos < sizeof bytes ? length - pos : sizeof bytes;
-            if (!regionRead(self, at + WAL_COMMIT_BYTES + WAL_RECORD_FIXED + pos, bytes, take))
+            u8 chunk[WAL_READ_CHUNK];
+            bytes take = length - pos < sizeof chunk ? length - pos : sizeof chunk;
+            if (!regionRead(self, at + WAL_COMMIT_BYTES + WAL_RECORD_FIXED + pos, chunk, take))
                 return WAL_IO;
-            crc = Crc32_update(crc, bytes, take);
+            crc = Crc32_update(crc, chunk, take);
             if (scratch != nullptr && length <= cap)
-                memcpy(scratch + pos, bytes, take);
+                memcpy(scratch + pos, chunk, take);
             pos += (u32) take;
         }
         u8 trailer[4];
@@ -427,7 +427,7 @@ static Wal *allocWal(const char *path) {
     return self;
 }
 
-Wal *Wal_0(void) {
+Wal *Wal_0() {
     Wal *self = (Wal*) Memory_alloc(TYPE_DB_WAL_SINGLETON, sizeof(Wal));
     if (self == nullptr) {
         THROW("Wal_0: allocation refused");
@@ -513,7 +513,7 @@ Wal *Wal_3(const char *path, u64 offset, u64 capacity) {
     return self;
 }
 
-void Wal_free(Wal *self) {
+fn Wal_free(Wal *self) {
     if (self == nullptr)
         return;
     if ((*self).file != nullptr)
@@ -647,7 +647,7 @@ WalCode Wal_sync(Wal *self) {
 }
 
 WalCode Wal_replay(Wal *self, u8 *scratch, bytes scratchCap,
-                   WalVisitFn visit, void *context) {
+                   WalVisitFn visit, any context) {
     if (self == nullptr || !(*self).open) {
         THROW("Wal_replay: the owner is not open");
         if (self != nullptr)
@@ -710,7 +710,7 @@ WalCode Wal_checkpoint(Wal *self) {
         return WAL_IO;
     }
     // The truncation changed the file's length behind the handle's back.
-    (void) File_refreshSize(file);
+    (discard) File_refreshSize(file);
     if (!File_seek(file, (int64_t) WAL_HEADER_BYTES) || !syncFile(self)) {
         THROW("Wal_checkpoint: the truncated log could not be made durable");
         (*self).lastCode = WAL_IO;
@@ -766,7 +766,7 @@ bool Wal_toString(const Wal *self, char *dest, bytes capacity, bool *outTruncate
     return !cut;
 }
 
-static void quotePath(const char *path, char dest[WAL_PATH_MAX * 4u + 3u]) {
+static fn quotePath(const char *path, char dest[WAL_PATH_MAX * 4u + 3u]) {
     static const char hex[] = "0123456789abcdef";
     bytes used = 0u;
     dest[used++] = '"';

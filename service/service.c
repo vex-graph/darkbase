@@ -44,7 +44,7 @@
  *   HeadlessSecretStoreFn store   borrowed secure-secret write callback
  *   HeadlessSecretLoadFn load     borrowed secure-secret read callback
  *   HeadlessSecretRemoveFn remove borrowed secure-secret delete callback
- *   void *context                 borrowed secure-store callback context
+ *   any context                 borrowed secure-store callback context
  *   bool started                  database and admin record admitted
  *   bool adminAuthenticated       current process-local admin session
  *   bool acceptRequests           explicit runtime admission gate
@@ -89,8 +89,8 @@ struct HeadlessService {
     HeadlessSecretStoreFn store;
     HeadlessSecretLoadFn load;
     HeadlessSecretRemoveFn remove;
-    ;;WHAT("void")
-    void *context;
+    ;;WHAT("fn")
+    any context;
     bool started;
     bool adminAuthenticated;
     bool acceptRequests;
@@ -139,7 +139,7 @@ static bool verifyPasswordTotp(HeadlessService *self, const char *password,
     return true;
 }
 
-static void cleanup(HeadlessService *self) {
+static fn cleanup(HeadlessService *self) {
     if (self == nullptr)
         return;
     (*self).acceptRequests = false;
@@ -227,7 +227,7 @@ static bool bootstrap(HeadlessService *self, char *outSetupSecret,
     return true;
 }
 
-HeadlessService *HeadlessService_0(void) {
+HeadlessService *HeadlessService_0() {
     HeadlessService *self = (HeadlessService*) Memory_alloc(0u, sizeof(HeadlessService));
     if (self == nullptr)
         return nullptr;
@@ -249,7 +249,7 @@ HeadlessService *HeadlessService_1(const char *databasePath) {
     return self;
 }
 
-void HeadlessService_free(HeadlessService *self) {
+fn HeadlessService_free(HeadlessService *self) {
     if (self == nullptr)
         return;
     cleanup(self);
@@ -258,7 +258,7 @@ void HeadlessService_free(HeadlessService *self) {
 
 bool HeadlessService_start(HeadlessService *self, HeadlessSecretStoreFn store,
                            HeadlessSecretLoadFn load, HeadlessSecretRemoveFn remove,
-                            void *context, char *outSetupSecret, bytes secretCapacity,
+                            any context, char *outSetupSecret, bytes secretCapacity,
                            bytes *outSecretLength) {
     if (outSecretLength != nullptr)
         *outSecretLength = 0u;

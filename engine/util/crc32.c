@@ -17,11 +17,11 @@
  * rejection (no pointer arithmetic happens over zero bytes); no allocation, no
  * logging, no state. ======================================================================== */
 
-u32 Crc32_update(u32 crc, const void *data, bytes length) {
-    const u8 *bytes = (const u8*) data;
+u32 Crc32_update(u32 crc, const_any data, bytes length) {
+    const u8 *raw = (const u8*) data;
     for (bytes i = 0u; i < length; i++) {
-        crc ^= bytes[i];
-        for (int bit = 0; bit < 8; bit++)
+        crc ^= raw[i];
+        for (i32 bit = 0; bit < 8; bit++)
             crc = (crc >> 1) ^ (0xEDB88320u & (u32) (-(i32) (crc & 1u)));
     }
     return crc;
@@ -29,6 +29,6 @@ u32 Crc32_update(u32 crc, const void *data, bytes length) {
 
 u32 Crc32_finalize(u32 crc) { return ~crc; }
 
-u32 Crc32_of(const void *data, bytes length) {
+u32 Crc32_of(const_any data, bytes length) {
     return Crc32_finalize(Crc32_update(CRC32_SEED, data, length));
 }

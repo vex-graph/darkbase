@@ -1,8 +1,7 @@
 #ifndef DARKBASE_TYPE_H
 #define DARKBASE_TYPE_H
 
-#include <stdint.h>
-
+#include "vex.h"
 #include "type/re_type.h"
 
 // oop/type.h — the darkbase-engine class registry (the One Type Registry Law).

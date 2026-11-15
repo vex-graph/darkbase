@@ -70,12 +70,12 @@ bool Page_sizeValid(u32 size);
 // Arity constructors: Page_0 has no storage; Page_2 binds borrowed storage of
 // `size` bytes without changing them or admitting their header. Null on refusal.
 // The caller retains the full live buffer and externally serializes all access.
-Page *Page_0(void);
+Page *Page_0();
 Page *Page_2(u8 *bytes, u32 size);
 #define Page(...) CONSTRUCTOR_DISPATCH(Page, __VA_ARGS__)
 #define Page_zero() Page_0()
 
-void Page_free(Page *self);
+fn Page_free(Page *self);
 
 // Start a page in place: zero it, write its header, clear the payload. Unsealed.
 PageCode Page_format(Page *self, u32 id, u32 kind);
@@ -108,7 +108,7 @@ u32    Page_size(const Page *self);
 u32    Page_sealValue(const Page *self);   // 0 while unsealed
 bool        Page_isSealed(const Page *self);
 bool        Page_isDirty(const Page *self);
-void        Page_markClean(Page *self);         // the caller flushed it
+fn        Page_markClean(Page *self);         // the caller flushed it
 
 const char *Page_codeName(PageCode code);
 const char *Page_kindName(u32 kind);

@@ -28,14 +28,14 @@
  *   bool failed               stream cannot continue without explicit reset
  * FUNCTION REGISTRY — exports:
  * CONSTRUCTORS:
- *   HeadlessProtocol HeadlessProtocol_0(void)
+ *   HeadlessProtocol HeadlessProtocol_0()
  *   HeadlessProtocol HeadlessProtocol_2(u8 *buffer, bytes capacity)
  * CORE / LIFECYCLE:
  *   bool HeadlessProtocol_feed(HeadlessProtocol *self, const u8 *bytes,
  *                              bytes length, bytes *outConsumed)
  *   bool HeadlessProtocol_finish(HeadlessProtocol *self)
  *   bool HeadlessProtocol_release(HeadlessProtocol *self)
- *   void HeadlessProtocol_reset(HeadlessProtocol *self)
+ *   fn HeadlessProtocol_reset(HeadlessProtocol *self)
  * QUERIES / BORROWED VIEWS:
  *   bool HeadlessProtocol_isReady(const HeadlessProtocol *self)
  *   bool HeadlessProtocol_isFailed(const HeadlessProtocol *self)
@@ -81,12 +81,12 @@ static u32 read32(const u8 *p) {
         ((u32) p[2] << 16u) | ((u32) p[3] << 24u);
 }
 
-static void write16(u16 value, u8 *p) {
+static fn write16(u16 value, u8 *p) {
     p[0] = (u8) value;
     p[1] = (u8) (value >> 8u);
 }
 
-static void write32(u32 value, u8 *p) {
+static fn write32(u32 value, u8 *p) {
     for (unsigned i = 0u; i < 4u; ++i)
         p[i] = (u8) (value >> (i * 8u));
 }
@@ -115,7 +115,7 @@ static bool reject(HeadlessProtocol *self, u32 code, bool terminal) {
     return false;
 }
 
-HeadlessProtocol HeadlessProtocol_0(void) {
+HeadlessProtocol HeadlessProtocol_0() {
     return (HeadlessProtocol) {0};
 }
 
@@ -131,11 +131,11 @@ HeadlessProtocol HeadlessProtocol_2(u8 *buffer, bytes capacity) {
     return self;
 }
 
-bool HeadlessProtocol_feed(HeadlessProtocol *self, const u8 *bytes,
+bool HeadlessProtocol_feed(HeadlessProtocol *self, const u8 *data,
                            bytes length, bytes *outConsumed) {
     if (outConsumed != nullptr)
         *outConsumed = 0u;
-    if (self == nullptr || outConsumed == nullptr || (bytes == nullptr && length != 0u))
+    if (self == nullptr || outConsumed == nullptr || (data == nullptr && length != 0u))
         return reject(self, HEADLESS_PROTOCOL_INVALID, false);
     if ((*self).failed) {
         if ((*self).code == HEADLESS_PROTOCOL_CAPACITY)
@@ -152,7 +152,7 @@ bool HeadlessProtocol_feed(HeadlessProtocol *self, const u8 *bytes,
         bytes remaining = length - *outConsumed;
         if (copy > remaining)
             copy = remaining;
-        memcpy((*self).buffer + (*self).used, bytes + *outConsumed, copy);
+        memcpy((*self).buffer + (*self).used, data + *outConsumed, copy);
         (*self).used += copy;
         *outConsumed += copy;
         if ((*self).expected == 0u && (*self).used == HEADLESS_WIRE_PREFIX_BYTES) {
@@ -189,7 +189,7 @@ bool HeadlessProtocol_finish(HeadlessProtocol *self) {
     return true;
 }
 
-void HeadlessProtocol_reset(HeadlessProtocol *self) {
+fn HeadlessProtocol_reset(HeadlessProtocol *self) {
     if (self == nullptr)
         return;
     if ((*self).used != 0u)
