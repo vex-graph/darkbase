@@ -4,18 +4,18 @@
 
 gist.md (`../../../metadata/gists/preferences/gist.md`) is the compressed law list; all universal laws bind this repository. Read one on demand: `./tools/prefs law "<title>"`. Universal laws are inherited, never restated.
 
-Tier: core (R3 Database Driver). Owns: Database interface, native vex store schema. Borrows: Relational Engine reflection/memory/storage, Vexspoke CPU computation/behavior.
+Tier: core / app (Database Driver + Store App). Owns: Database interface, native vex store schema. Borrows: Relational Engine reflection/memory/storage, Vexspoke CPU computation/behavior.
 
 ## Exclusive Laws
 
 | Law Title | Scope | Enforcement |
-| **Entity Model Law** | R3 Database Driver | Mandatory for `darkbase` |
-| **Row Borrow and Owned Copy Law** | R3 Database row ownership | Mandatory for `darkbase` |
-| **Reactive Program Law** | R3 Database Driver | Mandatory for `darkbase` |
-| **Store Versus Executable Separation Law** | R3 Database Driver | Mandatory for `darkbase` |
-| **Byte-Native Persistence Law** | R3 Database Driver | Mandatory for `darkbase` |
-| **Zero-Alloc Relational Table Scan Law** | R3 Database Driver | Mandatory for `darkbase` |
-| **B-Tree Page Consistency Law** | R3 Database Driver | Mandatory for `darkbase` |
+| **Entity Model Law** | core Database Driver | Mandatory for `darkbase` |
+| **Row Borrow and Owned Copy Law** | core Database row ownership | Mandatory for `darkbase` |
+| **Reactive Program Law** | core Database Driver | Mandatory for `darkbase` |
+| **Store Versus Executable Separation Law** | core Database Driver vs app | Mandatory for `darkbase` |
+| **Byte-Native Persistence Law** | core Database Driver | Mandatory for `darkbase` |
+| **Zero-Alloc Relational Table Scan Law** | core Database Driver | Mandatory for `darkbase` |
+| **B-Tree Page Consistency Law** | core Database Driver | Mandatory for `darkbase` |
 
 ### Entity Model Law
 
@@ -41,7 +41,7 @@ Tier: core (R3 Database Driver). Owns: Database interface, native vex store sche
 
 ### Store Versus Executable Separation Law
 
-* The store never includes R5 — hosts borrow an opaque `Database*` plus callbacks.
+* The store never includes `app` headers — hosts borrow an opaque `Database*` plus callbacks.
 * The executable is a separate application owning no store internals.
 * Store = `darkbase-db` (future), executable = `darkbase`.
 
