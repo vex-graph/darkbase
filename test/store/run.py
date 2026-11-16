@@ -91,7 +91,7 @@ def main():
             sources = [(ENGINE / "src/nio/mem.c", ENGINE),
                        (ENGINE / "src/io/file.c", CPU),
                        (ENGINE / "src/type/type.c", ENGINE),
-                       (CPU / "src/atomic/spin.c", CPU),
+                       (ENGINE / "src/atomic/spin_lock.c", ENGINE),
                        (DB / "src/page/page.c", DB),
                        (DB / "src/wal/wal.c", DB),
                        (DB / "src/util/crc32.c", DB),
