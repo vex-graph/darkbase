@@ -52,11 +52,26 @@ typedef struct DatabaseCrashProbe {
     u32 commits;
 } DatabaseCrashProbe;
 
+;;GETTER
+static inline u32 DatabaseCrashProbe_commits(const DatabaseCrashProbe *probe) { return (*probe).commits; }
+;;SETTER
+static inline fn DatabaseCrashProbe_setCommits(DatabaseCrashProbe *probe, u32 commits) { (*probe).commits = commits; }
+;;GETTER
+static inline u32 Row_id(const Row *r) { return (*r).id; }
+;;GETTER
+static inline i32 Row_health(const Row *r) { return (*r).health; }
+;;SETTER
+static inline fn Row_setHealth(Row *r, i32 health) { (*r).health = health; }
+
 /** Terminates after the root redo marker is durable but before page apply. */
 static fn crashAtDatabaseRoot(any context, u32 phase) {
     DatabaseCrashProbe *probe = (DatabaseCrashProbe*) context;
-    if (phase == STORE_AFTER_LOG_SYNC && ++(*probe).commits == 3u)
-        _exit(77);
+    if (phase == STORE_AFTER_LOG_SYNC) {
+        u32 next = DatabaseCrashProbe_commits(probe) + 1u;
+        DatabaseCrashProbe_setCommits(probe, next);
+        if (next == 3u)
+            _exit(77);
+    }
 }
 
 #define CHECK(cond)                                                       \
@@ -228,7 +243,7 @@ static fn testInsertOwned() {
     input.health = 99;
     Row *stored = (Row*) Database_row(db, "player", 0u);
     CHECK(stored != nullptr && stored != &input);
-    CHECK(stored != nullptr && (*stored).id == 29u && (*stored).health == 31);
+    CHECK(stored != nullptr && Row_id(stored) == 29u && Row_health(stored) == 31);
     CHECK(Database_insert(db, "player", &borrowed) == -1);
     CHECK(Database_count(db, "player") == 1u);
 
@@ -323,7 +338,7 @@ static fn testPersistence() {
     CHECK(Database_count(db2, "player") == 4u);
     for (u32 i = 0u; i < 4u; i++) {
         Row *got = (Row*) Database_row(db2, "player", i);
-        CHECK(got != nullptr && (*got).id == 7u + i && (*got).health == (i32) (i + 1u));
+        CHECK(got != nullptr && Row_id(got) == 7u + i && Row_health(got) == (i32) (i + 1u));
     }
 
     // Loaded rows are owned: binding a live row into them rejects.
@@ -336,7 +351,7 @@ static fn testPersistence() {
     CHECK(Database_insertOwned(db2, "player", &appended, sizeof appended) == 4);
     appended.health = 0;
     Row *owned = (Row*) Database_row(db2, "player", 4u);
-    CHECK(owned != nullptr && owned != &appended && (*owned).health == 99);
+    CHECK(owned != nullptr && owned != &appended && Row_health(owned) == 99);
     CHECK(Database_count(db2, "player") == 5u);
 
     // Re-loading into a non-empty entity rejects without mutation.
@@ -503,7 +518,7 @@ static fn testPageStorePersistence() {
     Row *changed = (Row*) Database_row(db, "player", 0u);
     CHECK(changed != nullptr);
     if (changed != nullptr)
-        (*changed).health = 999;
+        Row_setHealth(changed, 999);
     CHECK(Database_saveStore(db, store) == DATABASE_IO); // bounded journal rejects
     Database_free(db);
     Struct_free(schema);
@@ -529,8 +544,8 @@ static fn testPageStorePersistence() {
         CHECK(Database_loadStore(mismatch, store) == DATABASE_INVALID);
         CHECK(Database_count(mismatch, "player") == 1u);
         Row *preserved = (Row*) Database_row(mismatch, "player", 0u);
-        CHECK(preserved != nullptr && (*preserved).id == priorRow.id &&
-              (*preserved).health == priorRow.health);
+        CHECK(preserved != nullptr && Row_id(preserved) == priorRow.id &&
+              Row_health(preserved) == priorRow.health);
         u8 *preservedBytes = (u8*) preserved;
         CHECK(preservedBytes != nullptr &&
               preservedBytes[sizeof(Row)] == 0x5Au);
@@ -561,8 +576,8 @@ static fn testPageStorePersistence() {
         CHECK(absentEntry.code == DATABASE_ABSENT && !absentEntry.found);
         for (u32 i = 0u; i < 3u; i++) {
             Row *row = (Row*) Database_row(db, "player", i);
-            CHECK(row != nullptr && (*row).id == source[i].id &&
-                  (*row).health == source[i].health); // rejected replacement preserved old root
+            CHECK(row != nullptr && Row_id(row) == source[i].id &&
+                  Row_health(row) == source[i].health); // rejected replacement preserved old root
         }
         pointer wanted = 42u;
         DatabaseResult *query = Database_queryEqual(db, "player", "id",
@@ -639,7 +654,7 @@ static fn testPageStoreRecovery() {
         CHECK(Database_loadStore(db, store) == DATABASE_OK);
         CHECK(Database_count(db, "player") == 1u);
         Row *row = (Row*) Database_row(db, "player", 0u);
-        CHECK(row != nullptr && (*row).id == 91u && (*row).health == 101);
+        CHECK(row != nullptr && Row_id(row) == 91u && Row_health(row) == 101);
     }
     Database_free(db);
     Struct_free(schema);

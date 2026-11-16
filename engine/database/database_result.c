@@ -54,6 +54,21 @@
 
 // CONSTRUCTORS
 
+;;GETTER
+static inline ChunkedList *DatabaseResult_rows(const DatabaseResult *self) { return (*self).rows; }
+;;SETTER
+static inline fn DatabaseResult_setRows(DatabaseResult *self, ChunkedList *rows) { (*self).rows = rows; }
+;;SETTER
+static inline fn DatabaseResult_setCount(DatabaseResult *self, u32 count) { (*self).count = count; }
+;;GETTER
+static inline u32 DatabaseResult_cursor(const DatabaseResult *self) { return (*self).cursor; }
+;;SETTER
+static inline fn DatabaseResult_setCursor(DatabaseResult *self, u32 cursor) { (*self).cursor = cursor; }
+;;GETTER
+static inline u32 DatabaseResult_ownsRows(const DatabaseResult *self) { return (*self).ownsRows; }
+;;SETTER
+static inline fn DatabaseResult_setOwnsRows(DatabaseResult *self, u32 ownsRows) { (*self).ownsRows = ownsRows; }
+
 /**
  * Allocates an empty cursor with no row source; returns nullptr if allocation
  * fails.
@@ -62,10 +77,10 @@ DatabaseResult *DatabaseResult_0() {
     DatabaseResult *self = (DatabaseResult*) Memory_alloc(TYPE_DB_DATABASE_RESULT_SINGLETON, sizeof(DatabaseResult));
     if (self == nullptr)
         return nullptr;
-    (*self).rows = nullptr;
-    (*self).count = 0u;
-    (*self).cursor = 0u;
-    (*self).ownsRows = 0u;
+    DatabaseResult_setRows(self, nullptr);
+    DatabaseResult_setCount(self, 0u);
+    DatabaseResult_setCursor(self, 0u);
+    DatabaseResult_setOwnsRows(self, 0u);
     return self;
 }
 
@@ -86,9 +101,9 @@ DatabaseResult *DatabaseResult_2(ChunkedList *source, bool ownsSource) {
     DatabaseResult *self = DatabaseResult_0();
     if (self == nullptr)
         return nullptr;
-    (*self).rows = source;
-    (*self).count = ChunkedList_size(source);
-    (*self).ownsRows = ownsSource ? 1u : 0u;
+    DatabaseResult_setRows(self, source);
+    DatabaseResult_setCount(self, ChunkedList_size(source));
+    DatabaseResult_setOwnsRows(self, ownsSource ? 1u : 0u);
     return self;
 }
 
@@ -98,8 +113,8 @@ DatabaseResult *DatabaseResult_2(ChunkedList *source, bool ownsSource) {
  */
 fn DatabaseResult_free(DatabaseResult *self) {
     if (self != nullptr) {
-        if ((*self).ownsRows != 0u)
-            ChunkedList_free((*self).rows);
+        if (DatabaseResult_ownsRows(self) != 0u)
+            ChunkedList_free(DatabaseResult_rows(self));
         Memory_free(self);
     }
 }
@@ -130,15 +145,18 @@ bool DatabaseResult_check(const DatabaseResult *self, u64 typeId) {
  * changing the cursor or destination.
  */
 bool DatabaseResult_next(DatabaseResult *self, any *outRow) {
-    if (self == nullptr || outRow == nullptr || (*self).rows == nullptr)
+    if (self == nullptr || outRow == nullptr)
         return false;
-    u32 index = (*self).cursor;
-    if (index >= (*self).count)
+    ChunkedList *rows = DatabaseResult_rows(self);
+    if (rows == nullptr)
         return false;
-    u8 *slot = ChunkedList_slot((*self).rows, index);
+    u32 index = DatabaseResult_cursor(self);
+    if (index >= DatabaseResult_count(self))
+        return false;
+    u8 *slot = ChunkedList_slot(rows, index);
     if (slot == nullptr)
         return false;
-    (*self).cursor = index + 1u;
+    DatabaseResult_setCursor(self, index + 1u);
     *outRow = *(any*) slot;
     return true;
 }
@@ -154,7 +172,7 @@ u32 DatabaseResult_count(const DatabaseResult *self) {
  * Returns the index of the next row to be read, or zero for nullptr.
  */
 u32 DatabaseResult_position(const DatabaseResult *self) {
-    return self ? (*self).cursor : 0u;
+    return self ? DatabaseResult_cursor(self) : 0u;
 }
 
 /**
@@ -162,7 +180,7 @@ u32 DatabaseResult_position(const DatabaseResult *self) {
  */
 fn DatabaseResult_rewind(DatabaseResult *self) {
     if (self != nullptr)
-        (*self).cursor = 0u;
+        DatabaseResult_setCursor(self, 0u);
 }
 
 // STRING PROJECTIONS (the toString Law)
@@ -180,7 +198,8 @@ fn DatabaseResult_toString(const DatabaseResult *self, char *dest, bytes cap, bo
         snprintf(dest, cap, "nullptr");
         return;
     }
-    i32 written = snprintf(dest, cap, "DatabaseResult(%u/%u)", (*self).cursor, (*self).count);
+    i32 written = snprintf(dest, cap, "DatabaseResult(%u/%u)",
+                           DatabaseResult_cursor(self), DatabaseResult_count(self));
     if (written < 0 || (bytes) written >= cap) {
         if (outTruncated)
             *outTruncated = true;
@@ -202,8 +221,8 @@ fn DatabaseResult_toStringStruct(const DatabaseResult *self, char *dest, bytes c
     }
     i32 written = snprintf(dest, cap,
         "DatabaseResult { rows=0x%llx, count=%u, cursor=%u, ownsRows=%u }",
-        (u64) (pointer) (*self).rows, (*self).count,
-        (*self).cursor, (*self).ownsRows);
+        (u64) (pointer) DatabaseResult_rows(self), DatabaseResult_count(self),
+        DatabaseResult_cursor(self), DatabaseResult_ownsRows(self));
     if (written < 0 || (bytes) written >= cap) {
         if (outTruncated)
             *outTruncated = true;

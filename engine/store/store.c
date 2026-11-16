@@ -87,28 +87,96 @@ static u64 read64(const u8 *p) { u64 v; memcpy(&v, p, sizeof v); return v; }
 static fn put32(u8 *p, u32 v) { memcpy(p, &v, sizeof v); }
 static fn put64(u8 *p, u64 v) { memcpy(p, &v, sizeof v); }
 
+;;GETTER
+static inline u32 WalRecord_op(const WalRecord *r) { return (*r).op; }
+;;GETTER
+static inline u64 WalRecord_sequence(const WalRecord *r) { return (*r).sequence; }
+;;GETTER
+static inline u32 WalRecord_length(const WalRecord *r) { return (*r).length; }
+;;GETTER
+static inline const u8 *WalRecord_payload(const WalRecord *r) { return (*r).payload; }
+;;GETTER
+static inline u64 Store_mapping(const Store *self) { return (*self).mapping; }
+;;GETTER
+static inline u64 *Store_mappingMut(Store *self) { return &(*self).mapping; }
+;;GETTER
+static inline Wal *Store_wal(const Store *self) { return (*self).wal; }
+;;SETTER
+static inline fn Store_setWal(Store *self, Wal *wal) { (*self).wal = wal; }
+;;GETTER
+static inline Page *Store_page(const Store *self) { return (*self).page; }
+;;SETTER
+static inline fn Store_setPage(Store *self, Page *page) { (*self).page = page; }
+;;GETTER
+static inline u8 *Store_scratch(const Store *self) { return (*self).scratch; }
+;;SETTER
+static inline fn Store_setScratch(Store *self, u8 *scratch) { (*self).scratch = scratch; }
+;;GETTER
+static inline u8 *Store_redo(const Store *self) { return (*self).redo; }
+;;SETTER
+static inline fn Store_setRedo(Store *self, u8 *redo) { (*self).redo = redo; }
+;;SETTER
+static inline fn Store_setReserved(Store *self, bytes reserved) { (*self).reserved = reserved; }
+;;SETTER
+static inline fn Store_setJournalBytes(Store *self, bytes journalBytes) { (*self).journalBytes = journalBytes; }
+;;GETTER
+static inline bytes Store_dataOffset(const Store *self) { return (*self).dataOffset; }
+;;SETTER
+static inline fn Store_setDataOffset(Store *self, bytes dataOffset) { (*self).dataOffset = dataOffset; }
+;;SETTER
+static inline fn Store_setPageSize(Store *self, u32 pageSize) { (*self).pageSize = pageSize; }
+;;SETTER
+static inline fn Store_setPageCount(Store *self, u32 pageCount) { (*self).pageCount = pageCount; }
+;;SETTER
+static inline fn Store_setFreeHead(Store *self, u32 freeHead) { (*self).freeHead = freeHead; }
+;;SETTER
+static inline fn Store_setSequence(Store *self, u64 sequence) { (*self).sequence = sequence; }
+;;GETTER
+static inline u64 Store_refusals(const Store *self) { return (*self).refusals; }
+;;SETTER
+static inline fn Store_setRefusals(Store *self, u64 refusals) { (*self).refusals = refusals; }
+;;SETTER
+static inline fn Store_setCode(Store *self, StoreCode code) { (*self).code = code; }
+;;GETTER
+static inline bool Store_open(const Store *self) { return (*self).open; }
+;;SETTER
+static inline fn Store_setOpen(Store *self, bool open) { (*self).open = open; }
+;;GETTER
+static inline bool Store_blocked(const Store *self) { return (*self).blocked; }
+;;SETTER
+static inline fn Store_setBlocked(Store *self, bool blocked) { (*self).blocked = blocked; }
+;;GETTER
+static inline StoreCommitObserver Store_observer(const Store *self) { return (*self).observer; }
+;;SETTER
+static inline fn Store_setObserver(Store *self, StoreCommitObserver obs) { (*self).observer = obs; }
+;;GETTER
+static inline any Store_observerContext(const Store *self) { return (*self).observerContext; }
+;;SETTER
+static inline fn Store_setObserverContext(Store *self, any ctx) { (*self).observerContext = ctx; }
+
 static StoreCode reject(Store *self, StoreCode code, const char *why) {
     if (self != nullptr)
-        (*self).code = code;
+        Store_setCode(self, code);
     THROW("Store: %s", why);
     return code;
 }
 
 static StoreCode full(Store *self, bytes request, bytes bound) {
-    if ((*self).refusals == 0u)
+    u64 ref = Store_refusals(self);
+    if (ref == 0u)
         THROW("Store exhausted: request %zu bytes, bound %zu bytes", request, bound);
-    if ((*self).refusals != UINT64_MAX)
-        ++(*self).refusals;
-    (*self).code = STORE_FULL;
+    if (ref != UINT64_MAX)
+        Store_setRefusals(self, ref + 1u);
+    Store_setCode(self, STORE_FULL);
     return STORE_FULL;
 }
 
 static bool admit(Store *self) {
-    if (self == nullptr || !(*self).open) {
+    if (self == nullptr || !Store_open(self)) {
         reject(self, STORE_CLOSED, "owner is closed");
         return false;
     }
-    if ((*self).blocked) {
+    if (Store_blocked(self)) {
         reject(self, STORE_RECOVERY_REQUIRED, "uncertain commit; close and reopen");
         return false;
     }
@@ -135,94 +203,111 @@ Store *Store_0() {
 fn Store_free(Store *self) {
     if (self == nullptr)
         return;
-    Wal_free((*self).wal);
-    Page_free((*self).page);
-    if ((*self).scratch != nullptr)
-        Memory_free((*self).scratch);
-    if ((*self).redo != nullptr)
-        Memory_free((*self).redo);
-    re_gmap_drop((*self).mapping);
+    Wal_free(Store_wal(self));
+    Page_free(Store_page(self));
+    u8 *scratch = Store_scratch(self);
+    if (scratch != nullptr)
+        Memory_free(scratch);
+    u8 *redo = Store_redo(self);
+    if (redo != nullptr)
+        Memory_free(redo);
+    re_gmap_drop(Store_mapping(self));
     Memory_free(self);
 }
 
 static bool buffers(Store *self) {
-    (*self).scratch = (u8*) Memory_alloc(0u, (*self).pageSize);
-    (*self).redo = (u8*) Memory_alloc(0u, STORE_REDO_BYTES + (*self).pageSize);
-    if ((*self).scratch == nullptr || (*self).redo == nullptr)
+    u32 pageSize = Store_pageSize(self);
+    u8 *scratch = (u8*) Memory_alloc(0u, pageSize);
+    u8 *redo = (u8*) Memory_alloc(0u, STORE_REDO_BYTES + pageSize);
+    Store_setScratch(self, scratch);
+    Store_setRedo(self, redo);
+    if (scratch == nullptr || redo == nullptr)
         return false;
-    (*self).page = Page_2((*self).scratch, (*self).pageSize);
-    return (*self).page != nullptr;
+    Page *page = Page_2(scratch, pageSize);
+    Store_setPage(self, page);
+    return page != nullptr;
 }
 
 static bytes pageOffset(const Store *self, u32 id) {
-    return (*self).dataOffset + (bytes) (id - 1u) * (*self).pageSize;
+    return Store_dataOffset(self) + (bytes) (id - 1u) * Store_pageSize(self);
 }
 
 static StoreCode loadPage(Store *self, u32 id) {
-    if (id == 0u || id > (*self).pageCount)
+    if (id == 0u || id > Store_pageCount(self))
         return reject(self, STORE_INVALID, "page id outside allocation range");
     bool cut = false;
-    if (re_gmap_read((*self).mapping, pageOffset(self, id), (*self).pageSize,
-                     (*self).scratch, (*self).pageSize, &cut) != 0u)
+    u32 pageSize = Store_pageSize(self);
+    if (re_gmap_read(Store_mapping(self), pageOffset(self, id), pageSize,
+                     Store_scratch(self), pageSize, &cut) != 0u)
         return reject(self, STORE_IO, "mapped page read failed");
-    if (Page_load((*self).page) != PAGE_OK) {
-        (*self).code = STORE_CORRUPT;
+    Page *page = Store_page(self);
+    if (Page_load(page) != PAGE_OK) {
+        Store_setCode(self, STORE_CORRUPT);
         return STORE_CORRUPT;
     }
-    if (Page_id((*self).page) != id)
+    if (Page_id(page) != id)
         return reject(self, STORE_CORRUPT, "page id does not match its physical slot");
     return STORE_OK;
 }
 
 static bool apply(Store *self, const WalRecord *record) {
-    const u8 *p = (*record).payload;
-    if ((*self).sequence == UINT64_MAX || (*record).sequence != (*self).sequence + 1u ||
-        (*record).op != WAL_OP_UPDATE || (*record).length != STORE_REDO_BYTES + (*self).pageSize ||
+    const u8 *p = WalRecord_payload(record);
+    u64 seq = Store_sequence(self);
+    u64 recSeq = WalRecord_sequence(record);
+    u32 pageSize = Store_pageSize(self);
+    if (seq == UINT64_MAX || recSeq != seq + 1u ||
+        WalRecord_op(record) != WAL_OP_UPDATE || WalRecord_length(record) != STORE_REDO_BYTES + pageSize ||
         read32(p) != STORE_REDO_MAGIC || read32(p + 24u) != 0u || read32(p + 28u) != 0u)
         return false;
     u32 op = read32(p + 4u), id = read32(p + 8u);
     u32 count = read32(p + 12u), head = read32(p + 16u);
+    bytes dataOffset = Store_dataOffset(self);
     if (id == 0u || count == 0u || id > count || head > count || read32(p + 20u) != 0u ||
-        count > ((*self).reserved - (*self).dataOffset) / (*self).pageSize)
+        count > (Store_reserved(self) - dataOffset) / pageSize)
         return false;
+    u32 freeHead = Store_freeHead(self);
+    u32 pageCount = Store_pageCount(self);
+    Page *page = Store_page(self);
     if (op == STORE_ALLOCATE) {
-        if ((*self).freeHead == 0u) {
-            if ((*self).pageCount == UINT32_MAX || id != (*self).pageCount + 1u || count != id || head != 0u)
+        if (freeHead == 0u) {
+            if (pageCount == UINT32_MAX || id != pageCount + 1u || count != id || head != 0u)
                 return false;
         } else {
-            if (id != (*self).freeHead || count != (*self).pageCount || head == id ||
-                loadPage(self, id) != STORE_OK || Page_kind((*self).page) != PAGE_KIND_FREE ||
-                Page_used((*self).page) != sizeof(u32) || read32(Page_payloadOf((*self).page)) != head)
+            if (id != freeHead || count != pageCount || head == id ||
+                loadPage(self, id) != STORE_OK || Page_kind(page) != PAGE_KIND_FREE ||
+                Page_used(page) != sizeof(u32) || read32(Page_payloadOf(page)) != head)
                 return false;
         }
     } else if (op == STORE_REPLACE) {
-        if (count != (*self).pageCount || head != (*self).freeHead)
+        if (count != pageCount || head != freeHead)
             return false;
     } else if (op == STORE_RELEASE) {
-        if (count != (*self).pageCount || head != id || id == (*self).freeHead)
+        if (count != pageCount || head != id || id == freeHead)
             return false;
     } else
         return false;
-    if (op != STORE_ALLOCATE && (loadPage(self, id) != STORE_OK || Page_kind((*self).page) == PAGE_KIND_FREE))
+    if (op != STORE_ALLOCATE && (loadPage(self, id) != STORE_OK || Page_kind(page) == PAGE_KIND_FREE))
         return false;
-    memcpy((*self).scratch, p + STORE_REDO_BYTES, (*self).pageSize);
-    if (Page_load((*self).page) != PAGE_OK || Page_id((*self).page) != id)
+    u8 *scratch = Store_scratch(self);
+    memcpy(scratch, p + STORE_REDO_BYTES, pageSize);
+    if (Page_load(page) != PAGE_OK || Page_id(page) != id)
         return false;
     if (op == STORE_RELEASE) {
-        if (Page_kind((*self).page) != PAGE_KIND_FREE || Page_used((*self).page) != sizeof(u32) ||
-            read32(Page_payloadOf((*self).page)) != (*self).freeHead)
+        if (Page_kind(page) != PAGE_KIND_FREE || Page_used(page) != sizeof(u32) ||
+            read32(Page_payloadOf(page)) != freeHead)
             return false;
-    } else if (Page_kind((*self).page) == PAGE_KIND_FREE)
+    } else if (Page_kind(page) == PAGE_KIND_FREE)
         return false;
-    bytes end = (*self).dataOffset + (bytes) count * (*self).pageSize;
+    bytes end = dataOffset + (bytes) count * pageSize;
     bytes current = 0u;
-    if (re_gmap_len((*self).mapping, &current) != 0u ||
-        (end > current && re_gmap_grow_to((*self).mapping, end) != 0u) ||
-        re_gmap_write((*self).mapping, pageOffset(self, id), (*self).scratch, (*self).pageSize) != 0u)
+    u64 mapping = Store_mapping(self);
+    if (re_gmap_len(mapping, &current) != 0u ||
+        (end > current && re_gmap_grow_to(mapping, end) != 0u) ||
+        re_gmap_write(mapping, pageOffset(self, id), scratch, pageSize) != 0u)
         return false;
-    (*self).pageCount = count;
-    (*self).freeHead = head;
-    (*self).sequence = (*record).sequence;
+    Store_setPageCount(self, count);
+    Store_setFreeHead(self, head);
+    Store_setSequence(self, recSeq);
     return true;
 }
 
@@ -236,11 +321,12 @@ Store *Store_4(const char *path, bytes reserved, u32 pageSize, bytes journalByte
     Store *self = Store_0();
     if (self == nullptr)
         return nullptr;
-    (*self).reserved = reserved;
-    (*self).journalBytes = journalBytes;
-    (*self).pageSize = pageSize;
-    (*self).dataOffset = pageSize + journalBytes;
-    if (!buffers(self) || re_gmap_create(path, reserved, (*self).dataOffset, &(*self).mapping) != 0u)
+    bytes dataOffset = pageSize + journalBytes;
+    Store_setReserved(self, reserved);
+    Store_setJournalBytes(self, journalBytes);
+    Store_setPageSize(self, pageSize);
+    Store_setDataOffset(self, dataOffset);
+    if (!buffers(self) || re_gmap_create(path, reserved, dataOffset, Store_mappingMut(self)) != 0u)
         goto failure;
     u8 bootstrap[STORE_BOOTSTRAP_BYTES] = {0};
     memcpy(bootstrap, storeMagic, sizeof storeMagic);
@@ -248,17 +334,20 @@ Store *Store_4(const char *path, bytes reserved, u32 pageSize, bytes journalByte
     put32(bootstrap + 12u, pageSize);
     put64(bootstrap + 16u, reserved);
     put64(bootstrap + 24u, journalBytes);
-    put64(bootstrap + 32u, (*self).dataOffset);
-    if (Page_format((*self).page, 0u, PAGE_KIND_CATALOG) != PAGE_OK ||
-        Page_append((*self).page, bootstrap, sizeof bootstrap) != PAGE_OK ||
-        Page_seal((*self).page) != PAGE_OK ||
-        re_gmap_write((*self).mapping, 0u, (*self).scratch, pageSize) != 0u)
+    put64(bootstrap + 32u, dataOffset);
+    Page *page = Store_page(self);
+    u64 mapping = Store_mapping(self);
+    if (Page_format(page, 0u, PAGE_KIND_CATALOG) != PAGE_OK ||
+        Page_append(page, bootstrap, sizeof bootstrap) != PAGE_OK ||
+        Page_seal(page) != PAGE_OK ||
+        re_gmap_write(mapping, 0u, Store_scratch(self), pageSize) != 0u)
         goto failure;
-    (*self).wal = Wal_3(path, pageSize, journalBytes);
-    if ((*self).wal == nullptr || !Wal_isOpen((*self).wal) || Wal_code((*self).wal) != WAL_OK ||
-        Wal_sync((*self).wal) != WAL_OK || re_gmap_sync((*self).mapping) != 0u)
+    Wal *wal = Wal_3(path, pageSize, journalBytes);
+    Store_setWal(self, wal);
+    if (wal == nullptr || !Wal_isOpen(wal) || Wal_code(wal) != WAL_OK ||
+        Wal_sync(wal) != WAL_OK || re_gmap_sync(mapping) != 0u)
         goto failure;
-    (*self).open = true;
+    Store_setOpen(self, true);
     return self;
 failure:
     reject(self, STORE_IO, "creation failed; any new artifact is retained for explicit recovery");
@@ -296,37 +385,42 @@ Store *Store_1(const char *path) {
     Store *self = Store_0();
     if (self == nullptr)
         return nullptr;
-    (*self).reserved = (bytes) reserved;
-    (*self).journalBytes = (bytes) journal;
-    (*self).pageSize = size;
-    (*self).dataOffset = size + (bytes) journal;
+    bytes dataOffset = size + (bytes) journal;
+    Store_setReserved(self, (bytes) reserved);
+    Store_setJournalBytes(self, (bytes) journal);
+    Store_setPageSize(self, size);
+    Store_setDataOffset(self, dataOffset);
     bool cut = false;
-    if (!buffers(self) || re_gmap_open(path, (*self).reserved, (*self).dataOffset, &(*self).mapping) != 0u ||
-        re_gmap_read((*self).mapping, 0u, size, (*self).scratch, size, &cut) != 0u ||
-        Page_load((*self).page) != PAGE_OK || Page_id((*self).page) != 0u ||
-        Page_kind((*self).page) != PAGE_KIND_CATALOG || Page_used((*self).page) != STORE_BOOTSTRAP_BYTES)
+    if (!buffers(self) || re_gmap_open(path, (bytes) reserved, dataOffset, Store_mappingMut(self)) != 0u ||
+        re_gmap_read(Store_mapping(self), 0u, size, Store_scratch(self), size, &cut) != 0u ||
+        Page_load(Store_page(self)) != PAGE_OK || Page_id(Store_page(self)) != 0u ||
+        Page_kind(Store_page(self)) != PAGE_KIND_CATALOG || Page_used(Store_page(self)) != STORE_BOOTSTRAP_BYTES)
         goto failure;
+    u8 *scratch = Store_scratch(self);
     for (bytes i = 40u; i < STORE_BOOTSTRAP_BYTES; ++i)
-        if ((*self).scratch[PAGE_HEADER_BYTES + i] != 0u)
+        if (scratch[PAGE_HEADER_BYTES + i] != 0u)
             goto failure;
-    (*self).wal = Wal_3(path, size, (*self).journalBytes);
-    if ((*self).wal == nullptr || !Wal_isOpen((*self).wal) || Wal_baseSequence((*self).wal) != 0u ||
-        (Wal_code((*self).wal) != WAL_OK && Wal_code((*self).wal) != WAL_TRUNCATED))
+    Wal *wal = Wal_3(path, size, (bytes) journal);
+    Store_setWal(self, wal);
+    if (wal == nullptr || !Wal_isOpen(wal) || Wal_baseSequence(wal) != 0u ||
+        (Wal_code(wal) != WAL_OK && Wal_code(wal) != WAL_TRUNCATED))
         goto failure;
-    WalCode code = Wal_replay((*self).wal, (*self).redo, STORE_REDO_BYTES + size, replay, self);
-    if ((code != WAL_OK && code != WAL_TRUNCATED) || (*self).sequence != Wal_sequence((*self).wal) ||
-        re_gmap_sync((*self).mapping) != 0u)
+    WalCode code = Wal_replay(wal, Store_redo(self), STORE_REDO_BYTES + size, replay, self);
+    if ((code != WAL_OK && code != WAL_TRUNCATED) || Store_sequence(self) != Wal_sequence(wal) ||
+        re_gmap_sync(Store_mapping(self)) != 0u)
         goto failure;
     // Validate the complete free chain with a count-derived budget before admission.
-    u32 next = (*self).freeHead;
+    u32 next = Store_freeHead(self);
+    u32 pageCount = Store_pageCount(self);
+    Page *page = Store_page(self);
     u32 visits = 0u;
     while (next != 0u) {
-        if (++visits > (*self).pageCount || loadPage(self, next) != STORE_OK ||
-            Page_kind((*self).page) != PAGE_KIND_FREE || Page_used((*self).page) != sizeof(u32))
+        if (++visits > pageCount || loadPage(self, next) != STORE_OK ||
+            Page_kind(page) != PAGE_KIND_FREE || Page_used(page) != sizeof(u32))
             goto failure;
-        next = read32(Page_payloadOf((*self).page));
+        next = read32(Page_payloadOf(page));
     }
-    (*self).open = true;
+    Store_setOpen(self, true);
     return self;
 failure:
     reject(self, STORE_CORRUPT, "reopen/recovery rejected; no owner admitted");
@@ -335,67 +429,73 @@ failure:
 }
 
 static fn observe(Store *self, u32 phase) {
-    if ((*self).observer != nullptr)
-        (*self).observer((*self).observerContext, phase);
+    StoreCommitObserver obs = Store_observer(self);
+    if (obs != nullptr)
+        obs(Store_observerContext(self), phase);
 }
 
 static StoreCode commit(Store *self, u32 op, u32 id, u32 count, u32 head) {
-    u8 *r = (*self).redo;
+    u8 *r = Store_redo(self);
+    u32 pageSize = Store_pageSize(self);
+    Wal *wal = Store_wal(self);
     memset(r, 0, STORE_REDO_BYTES);
     put32(r, STORE_REDO_MAGIC);
     put32(r + 4u, op);
     put32(r + 8u, id);
     put32(r + 12u, count);
     put32(r + 16u, head);
-    memcpy(r + STORE_REDO_BYTES, (*self).scratch, (*self).pageSize);
+    memcpy(r + STORE_REDO_BYTES, Store_scratch(self), pageSize);
     u64 sequence = 0u;
-    WalCode code = Wal_append((*self).wal, WAL_OP_UPDATE, r, STORE_REDO_BYTES + (*self).pageSize, &sequence);
+    WalCode code = Wal_append(wal, WAL_OP_UPDATE, r, STORE_REDO_BYTES + pageSize, &sequence);
     if (code == WAL_FULL)
-        return full(self, STORE_REDO_BYTES + (*self).pageSize, (*self).journalBytes);
-    if (code != WAL_OK || Wal_sync((*self).wal) != WAL_OK) {
-        (*self).blocked = true;
+        return full(self, STORE_REDO_BYTES + pageSize, Store_journalBytes(self));
+    if (code != WAL_OK || Wal_sync(wal) != WAL_OK) {
+        Store_setBlocked(self, true);
         return reject(self, STORE_RECOVERY_REQUIRED, "journal outcome uncertain");
     }
     observe(self, STORE_AFTER_LOG_SYNC);
-    WalRecord record = {WAL_OP_UPDATE, sequence, r, STORE_REDO_BYTES + (*self).pageSize};
+    WalRecord record = {WAL_OP_UPDATE, sequence, r, STORE_REDO_BYTES + pageSize};
     if (!apply(self, &record)) {
-        (*self).blocked = true;
+        Store_setBlocked(self, true);
         return reject(self, STORE_RECOVERY_REQUIRED, "redo application failed");
     }
     observe(self, STORE_AFTER_PAGE_WRITE);
-    if (re_gmap_sync((*self).mapping) != 0u) {
-        (*self).blocked = true;
+    if (re_gmap_sync(Store_mapping(self)) != 0u) {
+        Store_setBlocked(self, true);
         return reject(self, STORE_RECOVERY_REQUIRED, "data sync failed after durable redo");
     }
     observe(self, STORE_AFTER_DATA_SYNC);
-    (*self).code = STORE_OK;
+    Store_setCode(self, STORE_OK);
     return STORE_OK;
 }
 
 static bool build(Store *self, u32 id, u32 kind, const u8 *bytes, u32 length) {
-    return Page_format((*self).page, id, kind) == PAGE_OK &&
-           Page_append((*self).page, bytes, length) == PAGE_OK && Page_seal((*self).page) == PAGE_OK;
+    Page *page = Store_page(self);
+    return Page_format(page, id, kind) == PAGE_OK &&
+           Page_append(page, bytes, length) == PAGE_OK && Page_seal(page) == PAGE_OK;
 }
 
 StoreCode Store_add(Store *self, u32 kind, const u8 *bytes, u32 length, u32 *outPageId) {
     if (!admit(self))
         return Store_code(self);
+    u32 pageSize = Store_pageSize(self);
     if (outPageId == nullptr || kind == PAGE_KIND_FREE || kind > PAGE_KIND_CATALOG ||
-        (bytes == nullptr && length != 0u) || length > (*self).pageSize - PAGE_HEADER_BYTES)
+        (bytes == nullptr && length != 0u) || length > pageSize - PAGE_HEADER_BYTES)
         return reject(self, STORE_INVALID, "invalid page append input");
-    u32 id = (*self).freeHead, head = 0u, count = (*self).pageCount;
+    u32 id = Store_freeHead(self), head = 0u, count = Store_pageCount(self);
+    Page *page = Store_page(self);
     if (id != 0u) {
         StoreCode code = loadPage(self, id);
         if (code != STORE_OK)
             return code;
-        if (Page_kind((*self).page) != PAGE_KIND_FREE || Page_used((*self).page) != sizeof(u32))
+        if (Page_kind(page) != PAGE_KIND_FREE || Page_used(page) != sizeof(u32))
             return reject(self, STORE_CORRUPT, "free-head page is not a free record");
-        head = read32(Page_payloadOf((*self).page));
+        head = read32(Page_payloadOf(page));
         if (head > count || head == id)
             return reject(self, STORE_CORRUPT, "free-head successor invalid");
     } else {
-        if (count >= ((*self).reserved - (*self).dataOffset) / (*self).pageSize || count == UINT32_MAX)
-            return full(self, (*self).pageSize, (*self).reserved);
+        if (count >= (Store_reserved(self) - Store_dataOffset(self)) / pageSize || count == UINT32_MAX)
+            return full(self, pageSize, Store_reserved(self));
         id = count + 1u;
         count = id;
     }
@@ -411,16 +511,16 @@ StoreCode Store_page_write(Store *self, u32 id, u32 kind, const u8 *bytes, u32 l
     if (!admit(self))
         return Store_code(self);
     if (kind == PAGE_KIND_FREE || kind > PAGE_KIND_CATALOG || (bytes == nullptr && length != 0u) ||
-        length > (*self).pageSize - PAGE_HEADER_BYTES)
+        length > Store_pageSize(self) - PAGE_HEADER_BYTES)
         return reject(self, STORE_INVALID, "invalid replacement page");
     StoreCode code = loadPage(self, id);
     if (code != STORE_OK)
         return code;
-    if (Page_kind((*self).page) == PAGE_KIND_FREE)
+    if (Page_kind(Store_page(self)) == PAGE_KIND_FREE)
         return reject(self, STORE_INVALID, "cannot replace a released page");
     if (!build(self, id, kind, bytes, length))
         return STORE_INVALID;
-    return commit(self, STORE_REPLACE, id, (*self).pageCount, (*self).freeHead);
+    return commit(self, STORE_REPLACE, id, Store_pageCount(self), Store_freeHead(self));
 }
 
 StoreCode Store_page_release(Store *self, u32 id) {
@@ -429,12 +529,12 @@ StoreCode Store_page_release(Store *self, u32 id) {
     StoreCode code = loadPage(self, id);
     if (code != STORE_OK)
         return code;
-    if (Page_kind((*self).page) == PAGE_KIND_FREE)
+    if (Page_kind(Store_page(self)) == PAGE_KIND_FREE)
         return reject(self, STORE_INVALID, "page already released");
-    u32 next = (*self).freeHead;
+    u32 next = Store_freeHead(self);
     if (!build(self, id, PAGE_KIND_FREE, (const u8*) &next, sizeof next))
         return STORE_INVALID;
-    return commit(self, STORE_RELEASE, id, (*self).pageCount, id);
+    return commit(self, STORE_RELEASE, id, Store_pageCount(self), id);
 }
 
 StoreCode Store_page_read(Store *self, u32 id, u8 *dest, bytes capacity,
@@ -446,35 +546,36 @@ StoreCode Store_page_read(Store *self, u32 id, u8 *dest, bytes capacity,
     StoreCode code = loadPage(self, id);
     if (code != STORE_OK)
         return code;
-    if (Page_kind((*self).page) == PAGE_KIND_FREE)
+    Page *page = Store_page(self);
+    if (Page_kind(page) == PAGE_KIND_FREE)
         return reject(self, STORE_INVALID, "page is released");
-    u32 length = Page_used((*self).page);
+    u32 length = Page_used(page);
     if (capacity < length) {
         *outTruncated = true;
         return reject(self, STORE_TRUNCATED, "read destination too small; no bytes copied");
     }
     if (length != 0u)
-        memcpy(dest, Page_payloadOf((*self).page), length);
+        memcpy(dest, Page_payloadOf(page), length);
     *outLength = length;
-    *outKind = Page_kind((*self).page);
+    *outKind = Page_kind(page);
     *outTruncated = false;
-    (*self).code = STORE_OK;
+    Store_setCode(self, STORE_OK);
     return STORE_OK;
 }
 
 StoreCode Store_sync(Store *self) {
     if (!admit(self))
         return Store_code(self);
-    if (re_gmap_sync((*self).mapping) != 0u) {
-        (*self).blocked = true;
+    if (re_gmap_sync(Store_mapping(self)) != 0u) {
+        Store_setBlocked(self, true);
         return reject(self, STORE_RECOVERY_REQUIRED, "explicit data sync failed");
     }
-    (*self).code = STORE_OK;
+    Store_setCode(self, STORE_OK);
     return STORE_OK;
 }
 
-bool Store_isOpen(const Store *self) { return self != nullptr && (*self).open; }
-bool Store_isBlocked(const Store *self) { return self != nullptr && (*self).blocked; }
+bool Store_isOpen(const Store *self) { return self != nullptr && Store_open(self); }
+bool Store_isBlocked(const Store *self) { return self != nullptr && Store_blocked(self); }
 StoreCode Store_code(const Store *self) { return self == nullptr ? STORE_CLOSED : (*self).code; }
 u32 Store_pageSize(const Store *self) { return self == nullptr ? 0u : (*self).pageSize; }
 u32 Store_pageCount(const Store *self) { return self == nullptr ? 0u : (*self).pageCount; }
@@ -482,15 +583,15 @@ u32 Store_freeHead(const Store *self) { return self == nullptr ? 0u : (*self).fr
 bytes Store_reserved(const Store *self) { return self == nullptr ? 0u : (*self).reserved; }
 bytes Store_journalBytes(const Store *self) { return self == nullptr ? 0u : (*self).journalBytes; }
 u64 Store_sequence(const Store *self) { return self == nullptr ? 0u : (*self).sequence; }
-u64 Store_exhaustionCount(const Store *self) { return self == nullptr ? 0u : (*self).refusals; }
+u64 Store_exhaustionCount(const Store *self) { return self == nullptr ? 0u : Store_refusals(self); }
 fn Store_setCommitObserver(Store *self, StoreCommitObserver observer, any context) {
     if (self != nullptr) {
-        (*self).observer = observer;
-        (*self).observerContext = context;
+        Store_setObserver(self, observer);
+        Store_setObserverContext(self, context);
     }
 }
-StoreCommitObserver Store_getCommitObserver(const Store *self) { return self == nullptr ? nullptr : (*self).observer; }
-any Store_getObserverContext(const Store *self) { return self == nullptr ? nullptr : (*self).observerContext; }
+StoreCommitObserver Store_getCommitObserver(const Store *self) { return self == nullptr ? nullptr : Store_observer(self); }
+any Store_getObserverContext(const Store *self) { return self == nullptr ? nullptr : Store_observerContext(self); }
 const char *Store_codeName(StoreCode code) {
     switch (code) {
         case STORE_OK: return "ok";
@@ -516,18 +617,19 @@ static bool project(const Store *self, bool structure, char *dest, bytes capacit
         n = snprintf(dest, capacity, "nullptr");
     else if (!structure)
         n = snprintf(dest, capacity, "Store(open=%d,pages=%u,sequence=%llu,blocked=%d)",
-            (*self).open, (*self).pageCount, (u64) (*self).sequence, (*self).blocked);
+            Store_open(self), Store_pageCount(self), (u64) Store_sequence(self), Store_blocked(self));
     else
         n = snprintf(dest, capacity,
             "Store{mapping=%s,wal=%s,page=%s,scratch=%s,redo=%s,reserved=%zu,journalBytes=%zu,"
             "dataOffset=%zu,pageSize=%u,pageCount=%u,freeHead=%u,sequence=%llu,refusals=%llu,"
             "code=%s,open=%d,blocked=%d,observer=%s,observerContext=redacted}",
-            (*self).mapping ? "resident" : "nullptr", (*self).wal ? "embedded" : "nullptr",
-            (*self).page ? "scratch" : "nullptr", (*self).scratch ? "owned" : "nullptr",
-            (*self).redo ? "owned" : "nullptr", (*self).reserved, (*self).journalBytes,
-            (*self).dataOffset, (*self).pageSize, (*self).pageCount, (*self).freeHead,
-            (u64) (*self).sequence, (u64) (*self).refusals,
-            Store_codeName((*self).code), (*self).open, (*self).blocked, (*self).observer ? "set" : "nullptr");
+            Store_mapping(self) ? "resident" : "nullptr", Store_wal(self) ? "embedded" : "nullptr",
+            Store_page(self) ? "scratch" : "nullptr", Store_scratch(self) ? "owned" : "nullptr",
+            Store_redo(self) ? "owned" : "nullptr", Store_reserved(self), Store_journalBytes(self),
+            Store_dataOffset(self), Store_pageSize(self), Store_pageCount(self), Store_freeHead(self),
+            (u64) Store_sequence(self), (u64) Store_refusals(self),
+            Store_codeName(Store_code(self)), Store_open(self), Store_blocked(self),
+            Store_observer(self) ? "set" : "nullptr");
     bool cut = n < 0 || (bytes) n >= capacity;
     if (outTruncated != nullptr)
         *outTruncated = cut;

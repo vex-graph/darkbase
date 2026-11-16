@@ -37,14 +37,24 @@ static u8 seenPayload[RECORDS][64];
 static u32 seenLength[RECORDS];
 static u32 seenCount = 0u;
 
+;;GETTER
+static inline u32 WalRecord_op(const WalRecord *r) { return (*r).op; }
+;;GETTER
+static inline u64 WalRecord_sequence(const WalRecord *r) { return (*r).sequence; }
+;;GETTER
+static inline u32 WalRecord_length(const WalRecord *r) { return (*r).length; }
+;;GETTER
+static inline const u8 *WalRecord_payload(const WalRecord *r) { return (*r).payload; }
+
 static bool collect(any context, const WalRecord *record) {
     (discard) context;
     assert(seenCount < RECORDS);
-    seenOps[seenCount] = (*record).op;
-    seenSeq[seenCount] = (*record).sequence;
-    seenLength[seenCount] = (*record).length;
-    if ((*record).length > 0u && (*record).length <= sizeof seenPayload[0])
-        memcpy(seenPayload[seenCount], (*record).payload, (*record).length);
+    seenOps[seenCount] = WalRecord_op(record);
+    seenSeq[seenCount] = WalRecord_sequence(record);
+    u32 len = WalRecord_length(record);
+    seenLength[seenCount] = len;
+    if (len > 0u && len <= sizeof seenPayload[0])
+        memcpy(seenPayload[seenCount], WalRecord_payload(record), len);
     ++seenCount;
     return true;
 }
@@ -52,7 +62,7 @@ static bool collect(any context, const WalRecord *record) {
 static u32 stopCalls = 0u;
 static bool stopAfterOne(any context, const WalRecord *record) {
     (discard) context;
-    assert((*record).sequence == 1u);   // it was handed the FIRST record, then stopped
+    assert(WalRecord_sequence(record) == 1u);   // it was handed the FIRST record, then stopped
     ++stopCalls;
     return false;   // the visitor may stop the walk; the log itself is still intact
 }

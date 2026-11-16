@@ -172,8 +172,55 @@ static bool writeExact(File *file, const_any src, bytes length) {
     return true;
 }
 
+;;GETTER
+static inline File *Wal_file(const Wal *self) { return (File*) (*self).file; }
+;;SETTER
+static inline fn Wal_setFile(Wal *self, File *file) { (*self).file = file; }
+;;GETTER
+static inline char *Wal_pathMut(Wal *self) { return (*self).path; }
+;;SETTER
+static inline fn Wal_setBaseSequence(Wal *self, u64 v) { (*self).baseSequence = v; }
+;;SETTER
+static inline fn Wal_setSequence(Wal *self, u64 v) { (*self).sequence = v; }
+;;SETTER
+static inline fn Wal_setCount(Wal *self, u32 v) { (*self).count = v; }
+;;SETTER
+static inline fn Wal_setRecovered(Wal *self, u32 v) { (*self).recovered = v; }
+;;GETTER
+static inline i32 Wal_lastCode(const Wal *self) { return (*self).lastCode; }
+;;SETTER
+static inline fn Wal_setLastCode(Wal *self, i32 v) { (*self).lastCode = v; }
+;;SETTER
+static inline fn Wal_setTailTorn(Wal *self, bool v) { (*self).tailTorn = v; }
+;;GETTER
+static inline bool Wal_open(const Wal *self) { return (*self).open; }
+;;SETTER
+static inline fn Wal_setOpen(Wal *self, bool v) { (*self).open = v; }
+;;GETTER
+static inline u64 Wal_offset(const Wal *self) { return (*self).offset; }
+;;SETTER
+static inline fn Wal_setOffset(Wal *self, u64 v) { (*self).offset = v; }
+;;GETTER
+static inline u64 Wal_capacity(const Wal *self) { return (*self).capacity; }
+;;SETTER
+static inline fn Wal_setCapacity(Wal *self, u64 v) { (*self).capacity = v; }
+;;GETTER
+static inline u64 Wal_end(const Wal *self) { return (*self).end; }
+;;SETTER
+static inline fn Wal_setEnd(Wal *self, u64 v) { (*self).end = v; }
+;;SETTER
+static inline fn Wal_setExhaustionCount(Wal *self, u64 v) { (*self).exhaustionCount = v; }
+;;GETTER
+static inline bool Wal_region(const Wal *self) { return (*self).region; }
+;;SETTER
+static inline fn Wal_setRegion(Wal *self, bool v) { (*self).region = v; }
+;;GETTER
+static inline bool Wal_poisoned(const Wal *self) { return (*self).poisoned; }
+;;SETTER
+static inline fn Wal_setPoisoned(Wal *self, bool v) { (*self).poisoned = v; }
+
 static bool syncFile(Wal *self) {
-    File *file = (File*) (*self).file;
+    File *file = Wal_file(self);
     if (!File_flush(file))
         return false;
 #if defined(VEX_PLATFORM_WINDOWS)
@@ -185,11 +232,11 @@ static bool syncFile(Wal *self) {
 
 static fn encodeHeader(const Wal *self, u8 out[WAL_HEADER_BYTES]) {
     putU32(&out[0], WAL_MAGIC);
-    out[4] = (u8) ((*self).region ? WAL_REGION_VERSION : WAL_VERSION);
+    out[4] = (u8) (Wal_region(self) ? WAL_REGION_VERSION : WAL_VERSION);
     out[5] = 0u;
     out[6] = 0u;
     out[7] = 0u;
-    putU64(&out[8], (*self).baseSequence);
+    putU64(&out[8], Wal_baseSequence(self));
     putU32(&out[16], 0u);
     putU32(&out[20], Crc32_of(out, 20u));
 }
@@ -197,34 +244,37 @@ static fn encodeHeader(const Wal *self, u8 out[WAL_HEADER_BYTES]) {
 static bool writeHeader(Wal *self) {
     u8 header[WAL_HEADER_BYTES];
     encodeHeader(self, header);
-    if (!File_seek((File*) (*self).file, (i64) (*self).offset))
+    File *file = Wal_file(self);
+    if (!File_seek(file, (i64) Wal_offset(self)))
         return false;
-    return writeExact((File*) (*self).file, header, WAL_HEADER_BYTES);
+    return writeExact(file, header, WAL_HEADER_BYTES);
 }
 
 static WalCode scanHeader(Wal *self) {
     u8 header[WAL_HEADER_BYTES];
-    if (!File_seek((File*) (*self).file, 0))
+    File *file = Wal_file(self);
+    if (!File_seek(file, 0))
         return WAL_IO;
-    i64 size = File_size((File*) (*self).file);
+    i64 size = File_size(file);
     if (size == 0) {
         // A brand-new log: write the header and start from sequence zero.
-        (*self).baseSequence = 0u;
-        (*self).sequence = 0u;
-        (*self).count = 0u;
+        Wal_setBaseSequence(self, 0u);
+        Wal_setSequence(self, 0u);
+        Wal_setCount(self, 0u);
         if (!writeHeader(self))
             return WAL_IO;
         return WAL_OK;
     }
-    if (size < (i64) WAL_HEADER_BYTES || !readExact((File*) (*self).file, header, WAL_HEADER_BYTES))
+    if (size < (i64) WAL_HEADER_BYTES || !readExact(file, header, WAL_HEADER_BYTES))
         return WAL_CORRUPT;
     if (getU32(&header[0]) != WAL_MAGIC || header[4] != (u8) WAL_VERSION)
         return WAL_CORRUPT;
     if (getU32(&header[20]) != Crc32_of(header, 20u))
         return WAL_CORRUPT;
-    (*self).baseSequence = getU64(&header[8]);
-    (*self).sequence = (*self).baseSequence;
-    (*self).count = 0u;
+    u64 base = getU64(&header[8]);
+    Wal_setBaseSequence(self, base);
+    Wal_setSequence(self, base);
+    Wal_setCount(self, 0u);
     return WAL_OK;
 }
 
@@ -236,8 +286,8 @@ static WalCode scanHeader(Wal *self) {
  */
 static WalCode scanRecords(Wal *self, u8 *scratch, bytes scratchCap,
                            WalVisitFn visit, any context, bool adopt) {
-    File *file = (File*) (*self).file;
-    u64 expected = (*self).baseSequence;
+    File *file = Wal_file(self);
+    u64 expected = Wal_baseSequence(self);
     u32 seen = 0u;
     u32 delivered = 0u;
     if (!File_seek(file, (i64) WAL_HEADER_BYTES))
@@ -249,11 +299,11 @@ static WalCode scanRecords(Wal *self, u8 *scratch, bytes scratchCap,
         if (prefixBytes <= 0)
             break;                       // clean end at a record boundary
         if (prefixBytes < (i64) WAL_RECORD_FIXED) {
-            (*self).tailTorn = true;     // a crash tore this record's prefix
+            Wal_setTailTorn(self, true); // a crash tore this record's prefix
             break;
         }
         if (getU32(&prefix[0]) != WAL_MAGIC) {
-            (*self).tailTorn = true;     // only the final prefix can be this broken
+            Wal_setTailTorn(self, true); // only the final prefix can be this broken
             break;
         }
         u32 op = getU32(&prefix[4]);
@@ -270,7 +320,7 @@ static WalCode scanRecords(Wal *self, u8 *scratch, bytes scratchCap,
             u8 chunk[WAL_READ_CHUNK];
             u32 want = remaining < WAL_READ_CHUNK ? remaining : WAL_READ_CHUNK;
             if (!readExact(file, chunk, want)) {
-                (*self).tailTorn = true;
+                Wal_setTailTorn(self, true);
                 break;
             }
             crc = Crc32_update(crc, chunk, want);
@@ -280,10 +330,10 @@ static WalCode scanRecords(Wal *self, u8 *scratch, bytes scratchCap,
             }
             remaining -= want;
         }
-        if ((*self).tailTorn)
+        if (Wal_tailTorn(self))
             break;
         if (!readExact(file, trailer, 4u)) {
-            (*self).tailTorn = true;
+            Wal_setTailTorn(self, true);
             break;
         }
         if (Crc32_finalize(crc) != getU32(trailer))
@@ -302,19 +352,21 @@ static WalCode scanRecords(Wal *self, u8 *scratch, bytes scratchCap,
         // read-only walk: if it moved the position, a replay refused for a small
         // buffer would make the next append reuse a sequence.
         if (adopt) {
-            (*self).sequence = sequence;
-            (*self).count = seen;
+            Wal_setSequence(self, sequence);
+            Wal_setCount(self, seen);
         }
     }
     if (visit != nullptr)
-        (*self).recovered = delivered;   // how many the visitor actually received
-    return (*self).tailTorn ? WAL_TRUNCATED : WAL_OK;
+        Wal_setRecovered(self, delivered); // how many the visitor actually received
+    return Wal_tailTorn(self) ? WAL_TRUNCATED : WAL_OK;
 }
 
 static bool regionRead(Wal *self, u64 at, any dest, bytes size) {
-    return at <= (*self).capacity && size <= (*self).capacity - at &&
-           File_seek((File*) (*self).file, (i64) ((*self).offset + at)) &&
-           readExact((File*) (*self).file, dest, size);
+    u64 cap = Wal_capacity(self);
+    File *file = Wal_file(self);
+    return at <= cap && size <= cap - at &&
+           File_seek(file, (i64) (Wal_offset(self) + at)) &&
+           readExact(file, dest, size);
 }
 
 static bool zeroBytes(const u8 *data, bytes size) {
@@ -329,13 +381,14 @@ static bool zeroBytes(const u8 *data, bytes size) {
 static WalCode scanRegion(Wal *self, u8 *scratch, bytes cap,
                           WalVisitFn visit, any context, bool adopt) {
     u64 at = WAL_HEADER_BYTES;
-    u64 expected = (*self).baseSequence;
+    u64 expected = Wal_baseSequence(self);
+    u64 regionCap = Wal_capacity(self);
     u32 seen = 0u;
-    (*self).recovered = 0u;
-    (*self).tailTorn = false;
-    while (at < (*self).capacity) {
+    Wal_setRecovered(self, 0u);
+    Wal_setTailTorn(self, false);
+    while (at < regionCap) {
         u8 marker[WAL_COMMIT_BYTES] = {0};
-        u64 room = (*self).capacity - at;
+        u64 room = regionCap - at;
         bytes n = room < WAL_COMMIT_BYTES ? (bytes) room : WAL_COMMIT_BYTES;
         if (!regionRead(self, at, marker, n))
             return WAL_IO;
@@ -343,13 +396,13 @@ static WalCode scanRegion(Wal *self, u8 *scratch, bytes cap,
             // Zero publication marker means no committed record, regardless of
             // untrusted body bytes. Distinguish pristine space from a torn body.
             u8 chunk[WAL_READ_CHUNK];
-            for (u64 pos = at + n; pos < (*self).capacity;) {
-                bytes take = (*self).capacity - pos < sizeof chunk ?
-                              (bytes) ((*self).capacity - pos) : sizeof chunk;
+            for (u64 pos = at + n; pos < regionCap;) {
+                bytes take = regionCap - pos < sizeof chunk ?
+                              (bytes) (regionCap - pos) : sizeof chunk;
                 if (!regionRead(self, pos, chunk, take))
                     return WAL_IO;
                 if (!zeroBytes(chunk, take)) {
-                    (*self).tailTorn = true;
+                    Wal_setTailTorn(self, true);
                     break;
                 }
                 pos += take;
@@ -394,18 +447,18 @@ static WalCode scanRegion(Wal *self, u8 *scratch, bytes cap,
             WalRecord record = {op, sequence, scratch, length};
             if (!visit(context, &record))
                 return WAL_INVALID;
-            ++(*self).recovered;
+            Wal_setRecovered(self, Wal_recovered(self) + 1u);
         }
         at += total;
         expected = sequence;
         ++seen;
     }
     if (adopt) {
-        (*self).end = at;
-        (*self).sequence = expected;
-        (*self).count = seen;
+        Wal_setEnd(self, at);
+        Wal_setSequence(self, expected);
+        Wal_setCount(self, seen);
     }
-    return (*self).tailTorn ? WAL_TRUNCATED : WAL_OK;
+    return Wal_tailTorn(self) ? WAL_TRUNCATED : WAL_OK;
 }
 
 static Wal *allocWal(const char *path) {
@@ -421,7 +474,7 @@ static Wal *allocWal(const char *path) {
         Memory_free(self);
         return nullptr;
     }
-    memcpy((*self).path, path, length + 1u);
+    memcpy(Wal_pathMut(self), path, length + 1u);
     return self;
 }
 
@@ -443,19 +496,19 @@ Wal *Wal_1(const char *path) {
     Wal *self = allocWal(path);
     if (self == nullptr)
         return nullptr;
-    File *file = File_open((*self).path, FILE_MODE_READ | FILE_MODE_WRITE | FILE_MODE_CREATE);
+    File *file = File_open(Wal_path(self), FILE_MODE_READ | FILE_MODE_WRITE | FILE_MODE_CREATE);
     if (file == nullptr) {
         THROW("Wal_1: the log could not be opened");
-        (*self).lastCode = WAL_IO;
-        (*self).file = nullptr;
+        Wal_setLastCode(self, WAL_IO);
+        Wal_setFile(self, nullptr);
         return self;
     }
-    (*self).file = file;
-    (*self).open = true;
+    Wal_setFile(self, file);
+    Wal_setOpen(self, true);
     WalCode code = scanHeader(self);
     if (code == WAL_OK)
         code = scanRecords(self, nullptr, 0u, nullptr, nullptr, true);
-    (*self).lastCode = code;
+    Wal_setLastCode(self, code);
     if (code == WAL_CORRUPT) {
         // The tail scan cannot corrupt anything, but a bad header cannot be used.
         THROW("Wal_1: the log header or a record is corrupt");
@@ -472,12 +525,12 @@ Wal *Wal_3(const char *path, u64 offset, u64 capacity) {
     Wal *self = allocWal(path);
     if (self == nullptr)
         return nullptr;
-    (*self).region = true;
-    (*self).offset = offset;
-    (*self).capacity = capacity;
-    (*self).end = WAL_HEADER_BYTES;
+    Wal_setRegion(self, true);
+    Wal_setOffset(self, offset);
+    Wal_setCapacity(self, capacity);
+    Wal_setEnd(self, WAL_HEADER_BYTES);
     File *file = File_open(path, FILE_MODE_READ | FILE_MODE_WRITE);
-    (*self).file = file;
+    Wal_setFile(self, file);
     struct stat status;
     WalCode code = WAL_IO;
     if (file != nullptr && fstat(fileno(File_handle(file)), &status) == 0 &&
@@ -488,7 +541,7 @@ Wal *Wal_3(const char *path, u64 offset, u64 capacity) {
             code = WAL_CORRUPT;
             if (zeroBytes(header, sizeof header)) {
                 // Validate the WHOLE pristine region before initializing anything.
-                (*self).open = true;
+                Wal_setOpen(self, true);
                 code = scanRegion(self, nullptr, 0u, nullptr, nullptr, true);
                 if (code == WAL_TRUNCATED)
                     code = WAL_CORRUPT;
@@ -498,15 +551,16 @@ Wal *Wal_3(const char *path, u64 offset, u64 capacity) {
                        header[5] == 0u && header[6] == 0u && header[7] == 0u &&
                        getU32(header + 16) == 0u &&
                        getU32(header + 20) == Crc32_of(header, 20u)) {
-                (*self).baseSequence = getU64(header + 8);
+                Wal_setBaseSequence(self, getU64(header + 8));
                 code = scanRegion(self, nullptr, 0u, nullptr, nullptr, true);
             }
         }
     }
-    (*self).lastCode = code;
-    (*self).open = code == WAL_OK || code == WAL_TRUNCATED;
-    (*self).poisoned = !(*self).open;
-    if (!(*self).open)
+    Wal_setLastCode(self, code);
+    bool isOpen = code == WAL_OK || code == WAL_TRUNCATED;
+    Wal_setOpen(self, isOpen);
+    Wal_setPoisoned(self, !isOpen);
+    if (!isOpen)
         THROW("Wal_3: region admission failed (%s)", Wal_codeName(code));
     return self;
 }
@@ -514,22 +568,23 @@ Wal *Wal_3(const char *path, u64 offset, u64 capacity) {
 fn Wal_free(Wal *self) {
     if (self == nullptr)
         return;
-    if ((*self).file != nullptr)
-        File_close((File*) (*self).file);
+    File *file = Wal_file(self);
+    if (file != nullptr)
+        File_close(file);
     Memory_free(self);
 }
 
-bool Wal_isOpen(const Wal *self) { return self != nullptr && (*self).open; }
+bool Wal_isOpen(const Wal *self) { return self != nullptr && Wal_open(self); }
 const char *Wal_path(const Wal *self) { return self == nullptr ? "" : (*self).path; }
-WalCode Wal_code(const Wal *self) { return self == nullptr ? WAL_INVALID : (WalCode) (*self).lastCode; }
+WalCode Wal_code(const Wal *self) { return self == nullptr ? WAL_INVALID : (WalCode) Wal_lastCode(self); }
 u64 Wal_sequence(const Wal *self) { return self == nullptr ? 0u : (*self).sequence; }
 u64 Wal_baseSequence(const Wal *self) { return self == nullptr ? 0u : (*self).baseSequence; }
 u32 Wal_count(const Wal *self) { return self == nullptr ? 0u : (*self).count; }
 u32 Wal_recovered(const Wal *self) { return self == nullptr ? 0u : (*self).recovered; }
 bool Wal_tailTorn(const Wal *self) { return self != nullptr && (*self).tailTorn; }
 u64 Wal_remaining(const Wal *self) {
-    return self == nullptr || !(*self).open ? 0u :
-           ((*self).region ? (*self).capacity - (*self).end : UINT64_MAX);
+    return self == nullptr || !Wal_open(self) ? 0u :
+           (Wal_region(self) ? Wal_capacity(self) - Wal_end(self) : UINT64_MAX);
 }
 u64 Wal_exhaustionCount(const Wal *self) {
     return self == nullptr ? 0u : (*self).exhaustionCount;
@@ -537,33 +592,38 @@ u64 Wal_exhaustionCount(const Wal *self) {
 
 WalCode Wal_append(Wal *self, u32 op, const u8 *payload, u32 length,
                    u64 *outSequence) {
-    if (self == nullptr || !(*self).open) {
+    if (self == nullptr || !Wal_open(self)) {
         THROW("Wal_append: the owner is not open");
         if (self != nullptr)
-            (*self).lastCode = WAL_CLOSED;
+            Wal_setLastCode(self, WAL_CLOSED);
         return WAL_CLOSED;
     }
     if (op < WAL_OP_INSERT || op > WAL_OP_CHECKPOINT ||
         (payload == nullptr && length != 0u) || length > WAL_PAYLOAD_MAX) {
         THROW("Wal_append: unknown op, null payload or an over-large payload");
-        (*self).lastCode = WAL_INVALID;
+        Wal_setLastCode(self, WAL_INVALID);
         return WAL_INVALID;
     }
-    File *file = (File*) (*self).file;
-    if ((*self).poisoned || (*self).sequence == UINT64_MAX || (*self).count == UINT32_MAX) {
+    File *file = Wal_file(self);
+    u64 curSeq = Wal_sequence(self);
+    u32 curCount = Wal_count(self);
+    if (Wal_poisoned(self) || curSeq == UINT64_MAX || curCount == UINT32_MAX) {
         THROW("Wal_append: poisoned owner or sequence/count overflow");
-        (*self).lastCode = WAL_INVALID;
+        Wal_setLastCode(self, WAL_INVALID);
         return WAL_INVALID;
     }
+    bool isRegion = Wal_region(self);
     u64 total = WAL_RECORD_FIXED + (u64) length + 4u + WAL_COMMIT_BYTES;
-    if ((*self).region && total > Wal_remaining(self)) {
-        if ((*self).exhaustionCount++ == 0u)
+    if (isRegion && total > Wal_remaining(self)) {
+        u64 exh = Wal_exhaustionCount(self);
+        Wal_setExhaustionCount(self, exh + 1u);
+        if (exh == 0u)
             THROW("Wal_append: region exhausted, request %llu bytes (remaining %llu)",
                   (u64) total, (u64) Wal_remaining(self));
-        (*self).lastCode = WAL_FULL;
+        Wal_setLastCode(self, WAL_FULL);
         return WAL_FULL;
     }
-    u64 sequence = (*self).sequence + 1u;
+    u64 sequence = curSeq + 1u;
     u8 prefix[WAL_RECORD_FIXED];
     putU32(&prefix[0], WAL_MAGIC);
     putU32(&prefix[4], op);
@@ -576,145 +636,149 @@ WalCode Wal_append(Wal *self, u32 op, const u8 *payload, u32 length,
     // Whole record validated above; only now does the file get touched. The end is
     // REFRESHED, not read from the cached size: after a checkpoint truncated the log
     // a stale size would position this record past the new end and leave a hole.
-    if ((*self).region && (*self).tailTorn) {
+    u64 offset = Wal_offset(self);
+    u64 end = Wal_end(self);
+    u64 cap = Wal_capacity(self);
+    if (isRegion && Wal_tailTorn(self)) {
         // Clear discarded bytes before a shorter replacement can expose stale markers.
         u8 zeros[WAL_READ_CHUNK] = {0};
-        bool cleared = File_seek(file, (i64) ((*self).offset + (*self).end));
-        for (u64 pos = (*self).end; cleared && pos < (*self).capacity;) {
-            bytes take = (*self).capacity - pos < sizeof zeros ?
-                          (bytes) ((*self).capacity - pos) : sizeof zeros;
+        bool cleared = File_seek(file, (i64) (offset + end));
+        for (u64 pos = end; cleared && pos < cap;) {
+            bytes take = cap - pos < sizeof zeros ?
+                          (bytes) (cap - pos) : sizeof zeros;
             cleared = writeExact(file, zeros, take);
             pos += take;
         }
         if (!cleared || !syncFile(self)) {
-            (*self).poisoned = true;
-            (*self).lastCode = WAL_IO;
+            Wal_setPoisoned(self, true);
+            Wal_setLastCode(self, WAL_IO);
             THROW("Wal_append: discarded tail could not be cleared");
             return WAL_IO;
         }
     }
-    i64 position = (*self).region ? (i64) ((*self).offset + (*self).end) : File_refreshSize(file);
+    i64 position = isRegion ? (i64) (offset + end) : File_refreshSize(file);
     u8 zeroMarker[WAL_COMMIT_BYTES] = {0};
     if (!File_seek(file, position) ||
-        ((*self).region && !writeExact(file, zeroMarker, sizeof zeroMarker)) ||
+        (isRegion && !writeExact(file, zeroMarker, sizeof zeroMarker)) ||
         !writeExact(file, prefix, WAL_RECORD_FIXED) ||
         (length > 0u && !writeExact(file, payload, length)) || !writeExact(file, trailer, 4u)) {
         THROW("Wal_append: the record could not be written");
-        (*self).lastCode = WAL_IO;
-        (*self).poisoned = (*self).region;
+        Wal_setLastCode(self, WAL_IO);
+        Wal_setPoisoned(self, isRegion);
         return WAL_IO;
     }
-    if ((*self).region) {
+    if (isRegion) {
         u8 marker[WAL_COMMIT_BYTES];
         putU64(marker, WAL_COMMIT_MAGIC);
         if (!syncFile(self) || !File_seek(file, position) || !writeExact(file, marker, sizeof marker)) {
-            (*self).poisoned = true;
-            (*self).lastCode = WAL_IO;
+            Wal_setPoisoned(self, true);
+            Wal_setLastCode(self, WAL_IO);
             THROW("Wal_append: record sync or marker publication failed");
             return WAL_IO;
         }
-        (*self).end += total;
-        (*self).tailTorn = false;
+        Wal_setEnd(self, end + total);
+        Wal_setTailTorn(self, false);
     }
-    ++(*self).count;
-    (*self).sequence = sequence;
+    Wal_setCount(self, curCount + 1u);
+    Wal_setSequence(self, sequence);
     if (outSequence != nullptr)
         *outSequence = sequence;
-    (*self).lastCode = WAL_OK;
+    Wal_setLastCode(self, WAL_OK);
     return WAL_OK;
 }
 
 WalCode Wal_sync(Wal *self) {
-    if (self == nullptr || !(*self).open) {
+    if (self == nullptr || !Wal_open(self)) {
         THROW("Wal_sync: the owner is not open");
         return WAL_CLOSED;
     }
-    if ((*self).poisoned) {
+    if (Wal_poisoned(self)) {
         THROW("Wal_sync: poisoned owner requires reopen");
-        (*self).lastCode = WAL_INVALID;
+        Wal_setLastCode(self, WAL_INVALID);
         return WAL_INVALID;
     }
     if (!syncFile(self)) {
         THROW("Wal_sync: the log could not be made durable");
-        (*self).lastCode = WAL_IO;
-        (*self).poisoned = (*self).region;
+        Wal_setLastCode(self, WAL_IO);
+        Wal_setPoisoned(self, Wal_region(self));
         return WAL_IO;
     }
-    (*self).lastCode = WAL_OK;
+    Wal_setLastCode(self, WAL_OK);
     return WAL_OK;
 }
 
 WalCode Wal_replay(Wal *self, u8 *scratch, bytes scratchCap,
                    WalVisitFn visit, any context) {
-    if (self == nullptr || !(*self).open) {
+    if (self == nullptr || !Wal_open(self)) {
         THROW("Wal_replay: the owner is not open");
         if (self != nullptr)
-            (*self).lastCode = WAL_CLOSED;
+            Wal_setLastCode(self, WAL_CLOSED);
         return WAL_CLOSED;
     }
     if (visit != nullptr && scratch == nullptr) {
         THROW("Wal_replay: a visitor was given no replay buffer");
-        (*self).lastCode = WAL_INVALID;
+        Wal_setLastCode(self, WAL_INVALID);
         return WAL_INVALID;
     }
-    bool retainedTail = (*self).tailTorn;
-    (*self).tailTorn = false;
+    bool retainedTail = Wal_tailTorn(self);
+    Wal_setTailTorn(self, false);
+    bool isRegion = Wal_region(self);
     // No header re-read and no adoption here: the append position was established at
     // open, and a replay must leave it exactly as it found it.
-    WalCode code = (*self).region ? scanRegion(self, scratch, scratchCap, visit, context, false) :
+    WalCode code = isRegion ? scanRegion(self, scratch, scratchCap, visit, context, false) :
                    scanRecords(self, scratch, scratchCap, visit, context, false);
-    if ((*self).region)
-        (*self).tailTorn = (*self).tailTorn || retainedTail;
-    if ((*self).region && code != WAL_OK && code != WAL_TRUNCATED) {
+    if (isRegion)
+        Wal_setTailTorn(self, Wal_tailTorn(self) || retainedTail);
+    if (isRegion && code != WAL_OK && code != WAL_TRUNCATED) {
         if (code == WAL_CORRUPT || code == WAL_IO)
-            (*self).poisoned = true;
+            Wal_setPoisoned(self, true);
         THROW("Wal_replay: region walk refused (%s)", Wal_codeName(code));
     }
-    (*self).lastCode = code;
+    Wal_setLastCode(self, code);
     return code;
 }
 
 WalCode Wal_checkpoint(Wal *self) {
-    if (self == nullptr || !(*self).open) {
+    if (self == nullptr || !Wal_open(self)) {
         THROW("Wal_checkpoint: the owner is not open");
         return WAL_CLOSED;
     }
-    if ((*self).region) {
+    if (Wal_region(self)) {
         THROW("Wal_checkpoint: embedded region cannot be checkpointed or truncated");
-        (*self).lastCode = WAL_INVALID;
+        Wal_setLastCode(self, WAL_INVALID);
         return WAL_INVALID;
     }
     if (!syncFile(self)) {
         THROW("Wal_checkpoint: the log could not be synced");
-        (*self).lastCode = WAL_IO;
+        Wal_setLastCode(self, WAL_IO);
         return WAL_IO;
     }
     // The caller has already made the DATA durable; only then is the log retired.
-    (*self).baseSequence = (*self).sequence;
-    (*self).count = 0u;
+    Wal_setBaseSequence(self, Wal_sequence(self));
+    Wal_setCount(self, 0u);
     if (!writeHeader(self)) {
         THROW("Wal_checkpoint: the header could not be rewritten");
-        (*self).lastCode = WAL_IO;
+        Wal_setLastCode(self, WAL_IO);
         return WAL_IO;
     }
-    File *file = (File*) (*self).file;
+    File *file = Wal_file(self);
 #if defined(VEX_PLATFORM_WINDOWS)
     if (_chsize_s(_fileno(File_handle(file)), (i64) WAL_HEADER_BYTES) != 0) {
 #else
     if (ftruncate(fileno(File_handle(file)), (off_t) WAL_HEADER_BYTES) != 0) {
 #endif
         THROW("Wal_checkpoint: the log could not be truncated");
-        (*self).lastCode = WAL_IO;
+        Wal_setLastCode(self, WAL_IO);
         return WAL_IO;
     }
     // The truncation changed the file's length behind the handle's back.
     (discard) File_refreshSize(file);
     if (!File_seek(file, (i64) WAL_HEADER_BYTES) || !syncFile(self)) {
         THROW("Wal_checkpoint: the truncated log could not be made durable");
-        (*self).lastCode = WAL_IO;
+        Wal_setLastCode(self, WAL_IO);
         return WAL_IO;
     }
-    (*self).lastCode = WAL_OK;
+    Wal_setLastCode(self, WAL_OK);
     return WAL_OK;
 }
 
@@ -755,7 +819,7 @@ bool Wal_toString(const Wal *self, char *dest, bytes capacity, bool *outTruncate
     if (self == nullptr)
         return writeNull(dest, capacity, outTruncated);
     i32 written = snprintf(dest, capacity, "Wal(open=%d, sequence=%llu, count=%u, base=%llu)",
-                           self != nullptr && (*self).open ? 1 : 0,
+                           self != nullptr && Wal_open(self) ? 1 : 0,
                            (u64) Wal_sequence(self), Wal_count(self),
                            (u64) Wal_baseSequence(self));
     bool cut = written < 0 || (bytes) written >= capacity;
@@ -796,7 +860,7 @@ bool Wal_toStringStruct(const Wal *self, char *dest, bytes capacity, bool *outTr
     if (self == nullptr)
         return writeNull(dest, capacity, outTruncated);
     char path[WAL_PATH_MAX * 4u + 3u];
-    quotePath((*self).path, path);
+    quotePath(Wal_path(self), path);
     i32 written = snprintf(dest, capacity,
                             "Wal{file=<owned>, path=%s, baseSequence=%llu, sequence=%llu, count=%u, "
                             "recovered=%u, lastCode=%s, tailTorn=%d, open=%d, offset=%llu, "
@@ -804,13 +868,13 @@ bool Wal_toStringStruct(const Wal *self, char *dest, bytes capacity, bool *outTr
                             path,
                             (u64) Wal_baseSequence(self),
                             (u64) Wal_sequence(self), Wal_count(self),
-                            Wal_recovered(self), Wal_codeName((*self).lastCode),
-                            (*self).tailTorn ? 1 : 0, (*self).open ? 1 : 0,
-                            (u64) (*self).offset,
-                            (u64) (*self).capacity,
-                            (u64) (*self).end,
-                            (u64) (*self).exhaustionCount,
-                            (*self).region ? 1 : 0, (*self).poisoned ? 1 : 0);
+                            Wal_recovered(self), Wal_codeName((WalCode) Wal_lastCode(self)),
+                            Wal_tailTorn(self) ? 1 : 0, Wal_open(self) ? 1 : 0,
+                            (u64) Wal_offset(self),
+                            (u64) Wal_capacity(self),
+                            (u64) Wal_end(self),
+                            (u64) Wal_exhaustionCount(self),
+                            Wal_region(self) ? 1 : 0, Wal_poisoned(self) ? 1 : 0);
     bool cut = written < 0 || (bytes) written >= capacity;
     if (outTruncated != nullptr)
         *outTruncated = cut;

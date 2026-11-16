@@ -71,6 +71,35 @@
 
 ;;INTENTION("Per the Conflict Triage Law and Single Class Per File Law (Java Law), derived frame counts/backing/readiness change only through constructor/feed/release/reset; setters cannot forge initialized bytes or payload lifetime.")
 
+;;GETTER
+static inline u8 *HeadlessProtocol_buffer(const HeadlessProtocol *self) { return (*self).buffer; }
+;;GETTER
+static inline bytes HeadlessProtocol_capacity(const HeadlessProtocol *self) { return (*self).capacity; }
+;;GETTER
+static inline bytes HeadlessProtocol_used(const HeadlessProtocol *self) { return (*self).used; }
+;;SETTER
+static inline fn HeadlessProtocol_setUsed(HeadlessProtocol *self, bytes used) { (*self).used = used; }
+;;GETTER
+static inline bytes HeadlessProtocol_expected(const HeadlessProtocol *self) { return (*self).expected; }
+;;SETTER
+static inline fn HeadlessProtocol_setExpected(HeadlessProtocol *self, bytes expected) { (*self).expected = expected; }
+;;GETTER
+static inline u64 HeadlessProtocol_exhaustionCount(const HeadlessProtocol *self) { return (*self).exhaustionCount; }
+;;SETTER
+static inline fn HeadlessProtocol_setExhaustionCount(HeadlessProtocol *self, u64 count) { (*self).exhaustionCount = count; }
+;;GETTER
+static inline u32 HeadlessProtocol_code(const HeadlessProtocol *self) { return (*self).code; }
+;;SETTER
+static inline fn HeadlessProtocol_setCode(HeadlessProtocol *self, u32 code) { (*self).code = code; }
+;;GETTER
+static inline bool HeadlessProtocol_ready(const HeadlessProtocol *self) { return (*self).ready; }
+;;SETTER
+static inline fn HeadlessProtocol_setReady(HeadlessProtocol *self, bool ready) { (*self).ready = ready; }
+;;GETTER
+static inline bool HeadlessProtocol_failed(const HeadlessProtocol *self) { return (*self).failed; }
+;;SETTER
+static inline fn HeadlessProtocol_setFailed(HeadlessProtocol *self, bool failed) { (*self).failed = failed; }
+
 static u16 read16(const u8 *p) {
     return (u16) ((u16) p[0] | ((u16) p[1] << 8u));
 }
@@ -98,15 +127,18 @@ static bool validHeader(u16 kind, u16 operation, u16 status, u32 id) {
 
 static bool reject(HeadlessProtocol *self, u32 code, bool terminal) {
     if (self != nullptr) {
-        (*self).code = code;
-        (*self).failed = (*self).failed || terminal;
+        HeadlessProtocol_setCode(self, code);
+        HeadlessProtocol_setFailed(self, HeadlessProtocol_failed(self) || terminal);
         if (code == HEADLESS_PROTOCOL_CAPACITY) {
-            if ((*self).exhaustionCount != UINT64_MAX)
-                ++(*self).exhaustionCount;
-            if ((*self).exhaustionCount > 1u)
+            u64 count = HeadlessProtocol_exhaustionCount(self);
+            if (count != UINT64_MAX) {
+                ++count;
+                HeadlessProtocol_setExhaustionCount(self, count);
+            }
+            if (count > 1u)
                 return false;
             THROW("HeadlessProtocol: frame request %zu exceeds backing bound %zu",
-                  (*self).expected, (*self).capacity);
+                  HeadlessProtocol_expected(self), HeadlessProtocol_capacity(self));
             return false;
         }
     }
@@ -136,54 +168,60 @@ bool HeadlessProtocol_feed(HeadlessProtocol *self, const u8 *data,
         *outConsumed = 0u;
     if (self == nullptr || outConsumed == nullptr || (data == nullptr && length != 0u))
         return reject(self, HEADLESS_PROTOCOL_INVALID, false);
-    if ((*self).failed) {
-        if ((*self).code == HEADLESS_PROTOCOL_CAPACITY)
+    if (HeadlessProtocol_failed(self)) {
+        if (HeadlessProtocol_code(self) == HEADLESS_PROTOCOL_CAPACITY)
             return reject(self, HEADLESS_PROTOCOL_CAPACITY, true);
         return false; // original terminal rejection already reported
     }
-    if ((*self).buffer == nullptr)
+    u8 *buf = HeadlessProtocol_buffer(self);
+    if (buf == nullptr)
         return reject(self, HEADLESS_PROTOCOL_CLOSED, false);
-    if ((*self).ready)
+    if (HeadlessProtocol_ready(self))
         return reject(self, HEADLESS_PROTOCOL_BUSY, false);
+    bytes cap = HeadlessProtocol_capacity(self);
     while (*outConsumed < length) {
-        bytes target = (*self).expected == 0u ? HEADLESS_WIRE_PREFIX_BYTES : (*self).expected;
-        bytes copy = target - (*self).used;
+        bytes expected = HeadlessProtocol_expected(self);
+        bytes used = HeadlessProtocol_used(self);
+        bytes target = expected == 0u ? HEADLESS_WIRE_PREFIX_BYTES : expected;
+        bytes copy = target - used;
         bytes remaining = length - *outConsumed;
         if (copy > remaining)
             copy = remaining;
-        memcpy((*self).buffer + (*self).used, data + *outConsumed, copy);
-        (*self).used += copy;
+        memcpy(buf + used, data + *outConsumed, copy);
+        used += copy;
+        HeadlessProtocol_setUsed(self, used);
         *outConsumed += copy;
-        if ((*self).expected == 0u && (*self).used == HEADLESS_WIRE_PREFIX_BYTES) {
-            u32 body = read32((*self).buffer);
+        if (expected == 0u && used == HEADLESS_WIRE_PREFIX_BYTES) {
+            u32 body = read32(buf);
             if (body < HEADLESS_WIRE_HEADER_BYTES - HEADLESS_WIRE_PREFIX_BYTES ||
                 body > HEADLESS_WIRE_MAX_BYTES - HEADLESS_WIRE_PREFIX_BYTES)
                 return reject(self, HEADLESS_PROTOCOL_LENGTH, true);
-            (*self).expected = (bytes) body + HEADLESS_WIRE_PREFIX_BYTES;
-            if ((*self).expected > (*self).capacity)
+            expected = (bytes) body + HEADLESS_WIRE_PREFIX_BYTES;
+            HeadlessProtocol_setExpected(self, expected);
+            if (expected > cap)
                 return reject(self, HEADLESS_PROTOCOL_CAPACITY, true);
         }
-        if ((*self).expected != 0u && (*self).used == (*self).expected) {
-            const u8 *header = (*self).buffer;
+        if (expected != 0u && used == expected) {
+            const u8 *header = buf;
             if (read16(header + 4u) != HEADLESS_WIRE_VERSION)
                 return reject(self, HEADLESS_PROTOCOL_VERSION, true);
             if (!validHeader(read16(header + 6u), read16(header + 8u),
                              read16(header + 10u), read32(header + 12u)))
                 return reject(self, HEADLESS_PROTOCOL_HEADER, true);
-            (*self).ready = true;
+            HeadlessProtocol_setReady(self, true);
             break;
         }
     }
-    (*self).code = HEADLESS_PROTOCOL_OK;
+    HeadlessProtocol_setCode(self, HEADLESS_PROTOCOL_OK);
     return true;
 }
 
 bool HeadlessProtocol_finish(HeadlessProtocol *self) {
-    if (self == nullptr || (*self).buffer == nullptr)
+    if (self == nullptr || HeadlessProtocol_buffer(self) == nullptr)
         return reject(self, HEADLESS_PROTOCOL_CLOSED, false);
-    if ((*self).failed)
+    if (HeadlessProtocol_failed(self))
         return false;
-    if ((*self).used != 0u && !(*self).ready)
+    if (HeadlessProtocol_used(self) != 0u && !HeadlessProtocol_ready(self))
         return reject(self, HEADLESS_PROTOCOL_TRUNCATED, true);
     return true;
 }
@@ -191,75 +229,76 @@ bool HeadlessProtocol_finish(HeadlessProtocol *self) {
 fn HeadlessProtocol_reset(HeadlessProtocol *self) {
     if (self == nullptr)
         return;
-    if ((*self).used != 0u)
-        memset((*self).buffer, 0, (*self).used);
-    (*self).used = 0u;
-    (*self).expected = 0u;
-    (*self).exhaustionCount = 0u;
-    (*self).code = HEADLESS_PROTOCOL_OK;
-    (*self).ready = false;
-    (*self).failed = false;
+    bytes used = HeadlessProtocol_used(self);
+    if (used != 0u)
+        memset(HeadlessProtocol_buffer(self), 0, used);
+    HeadlessProtocol_setUsed(self, 0u);
+    HeadlessProtocol_setExpected(self, 0u);
+    HeadlessProtocol_setExhaustionCount(self, 0u);
+    HeadlessProtocol_setCode(self, HEADLESS_PROTOCOL_OK);
+    HeadlessProtocol_setReady(self, false);
+    HeadlessProtocol_setFailed(self, false);
 }
 
 bool HeadlessProtocol_release(HeadlessProtocol *self) {
     if (!HeadlessProtocol_isReady(self))
         return reject(self, HEADLESS_PROTOCOL_INVALID, false);
-    u64 count = (*self).exhaustionCount;
+    u64 count = HeadlessProtocol_exhaustionCount(self);
     HeadlessProtocol_reset(self);
-    (*self).exhaustionCount = count;
+    HeadlessProtocol_setExhaustionCount(self, count);
     return true;
 }
 
 bool HeadlessProtocol_isReady(const HeadlessProtocol *self) {
-    return self != nullptr && (*self).ready;
+    return self != nullptr && HeadlessProtocol_ready(self);
 }
 
 bool HeadlessProtocol_isFailed(const HeadlessProtocol *self) {
-    return self != nullptr && (*self).failed;
+    return self != nullptr && HeadlessProtocol_failed(self);
 }
 
 u32 HeadlessProtocol_getCode(const HeadlessProtocol *self) {
-    return self == nullptr ? HEADLESS_PROTOCOL_INVALID : (*self).code;
+    return self == nullptr ? HEADLESS_PROTOCOL_INVALID : HeadlessProtocol_code(self);
 }
 
 u64 HeadlessProtocol_getExhaustionCount(const HeadlessProtocol *self) {
-    return self == nullptr ? 0u : (*self).exhaustionCount;
+    return self == nullptr ? 0u : HeadlessProtocol_exhaustionCount(self);
 }
 
 bytes HeadlessProtocol_getCapacity(const HeadlessProtocol *self) {
-    return self == nullptr ? 0u : (*self).capacity;
+    return self == nullptr ? 0u : HeadlessProtocol_capacity(self);
 }
 
 bytes HeadlessProtocol_getUsed(const HeadlessProtocol *self) {
-    return self == nullptr ? 0u : (*self).used;
+    return self == nullptr ? 0u : HeadlessProtocol_used(self);
 }
 
 bytes HeadlessProtocol_getExpected(const HeadlessProtocol *self) {
-    return self == nullptr ? 0u : (*self).expected;
+    return self == nullptr ? 0u : HeadlessProtocol_expected(self);
 }
 
 u16 HeadlessProtocol_getKind(const HeadlessProtocol *self) {
-    return HeadlessProtocol_isReady(self) ? read16((*self).buffer + 6u) : 0u;
+    return HeadlessProtocol_isReady(self) ? read16(HeadlessProtocol_buffer(self) + 6u) : 0u;
 }
 
 u16 HeadlessProtocol_getOperation(const HeadlessProtocol *self) {
-    return HeadlessProtocol_isReady(self) ? read16((*self).buffer + 8u) : 0u;
+    return HeadlessProtocol_isReady(self) ? read16(HeadlessProtocol_buffer(self) + 8u) : 0u;
 }
 
 u16 HeadlessProtocol_getStatus(const HeadlessProtocol *self) {
-    return HeadlessProtocol_isReady(self) ? read16((*self).buffer + 10u) : 0u;
+    return HeadlessProtocol_isReady(self) ? read16(HeadlessProtocol_buffer(self) + 10u) : 0u;
 }
 
 u32 HeadlessProtocol_getRequestId(const HeadlessProtocol *self) {
-    return HeadlessProtocol_isReady(self) ? read32((*self).buffer + 12u) : 0u;
+    return HeadlessProtocol_isReady(self) ? read32(HeadlessProtocol_buffer(self) + 12u) : 0u;
 }
 
 const u8 *HeadlessProtocol_getPayload(const HeadlessProtocol *self) {
-    return HeadlessProtocol_isReady(self) ? (*self).buffer + HEADLESS_WIRE_HEADER_BYTES : nullptr;
+    return HeadlessProtocol_isReady(self) ? HeadlessProtocol_buffer(self) + HEADLESS_WIRE_HEADER_BYTES : nullptr;
 }
 
 bytes HeadlessProtocol_getPayloadLength(const HeadlessProtocol *self) {
-    return HeadlessProtocol_isReady(self) ? (*self).used - HEADLESS_WIRE_HEADER_BYTES : 0u;
+    return HeadlessProtocol_isReady(self) ? HeadlessProtocol_used(self) - HEADLESS_WIRE_HEADER_BYTES : 0u;
 }
 
 bool HeadlessProtocol_encode(u16 kind, u16 operation, u16 status,
@@ -306,12 +345,12 @@ static bool project(const HeadlessProtocol *self, bool structure, char *dest,
     else if (structure)
         length = snprintf(dest, capacity,
             "HeadlessProtocol{buffer:<redacted>,capacity:%zu,used:%zu,expected:%zu,exhaustionCount:%llu,code:%u,ready:%u,failed:%u}",
-            (*self).capacity, (*self).used, (*self).expected,
-            (u64) (*self).exhaustionCount, (*self).code,
-            (u32) (*self).ready, (u32) (*self).failed);
+            HeadlessProtocol_capacity(self), HeadlessProtocol_used(self), HeadlessProtocol_expected(self),
+            (u64) HeadlessProtocol_exhaustionCount(self), HeadlessProtocol_code(self),
+            (u32) HeadlessProtocol_ready(self), (u32) HeadlessProtocol_failed(self));
     else
         length = snprintf(dest, capacity, "HeadlessProtocol{ready:%u,failed:%u}",
-                           (u32) (*self).ready, (u32) (*self).failed);
+                           (u32) HeadlessProtocol_ready(self), (u32) HeadlessProtocol_failed(self));
     bool complete = length >= 0 && (bytes) length < capacity;
     if (outTruncated != nullptr)
         *outTruncated = !complete;

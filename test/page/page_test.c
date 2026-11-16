@@ -25,13 +25,20 @@ static u32 rawU32(bytes offset) {
 /* Each rejected admission preserves every cached field and every supplied byte.
  * Capture the cold diagnostic as well as its return; normal admission is quiet.
  * External serialization is the contract; racing writes and dead buffers are not. */
+;;GETTER
+static inline u8 *Page_bytes(const Page *page) { return (*page).bytes; }
+;;SETTER
+static inline fn Page_setUsed(Page *page, u32 used) { (*page).used = used; }
+;;SETTER
+static inline fn Page_setSize(Page *page, u32 size) { (*page).size = size; }
+
 static fn checkAdmission(Page *page, PageCode expected, const char *message) {
     Page before;
     u8 bytesBefore[SIZE];
     if (page != nullptr) {
         memcpy(&before, page, sizeof before);
-        if ((*page).bytes != nullptr)
-            memcpy(bytesBefore, (*page).bytes, sizeof bytesBefore);
+        if (Page_bytes(page) != nullptr)
+            memcpy(bytesBefore, Page_bytes(page), sizeof bytesBefore);
     }
     FILE *capture = tmpfile();
     assert(capture != nullptr);
@@ -60,8 +67,8 @@ static fn checkAdmission(Page *page, PageCode expected, const char *message) {
         if (page != nullptr)
             assert(memcmp(page, &before, sizeof before) == 0);
     }
-    if (page != nullptr && (*page).bytes != nullptr)
-        assert(memcmp((*page).bytes, bytesBefore, sizeof bytesBefore) == 0);
+    if (page != nullptr && Page_bytes(page) != nullptr)
+        assert(memcmp(Page_bytes(page), bytesBefore, sizeof bytesBefore) == 0);
 }
 
 static fn restoredAdmission() {
@@ -82,7 +89,7 @@ static fn restoredAdmission() {
             assert(Page_used(reader) == 0u && !Page_isSealed(reader));
             checkAdmission(reader, PAGE_OK, nullptr);
             /* Verify must be independent of even an absurd stale cached used. */
-            (*reader).used = UINT32_MAX;
+            Page_setUsed(reader, UINT32_MAX);
             Page snapshot;
             memcpy(&snapshot, reader, sizeof snapshot);
             assert(Page_verify(reader) == PAGE_OK);
@@ -139,10 +146,10 @@ static fn restoredAdmission() {
     }
     u32 sizes[] = {0u, PAGE_HEADER_BYTES - 1u, SIZE - 1u, PAGE_SIZE_MAX + 1u};
     for (bytes i = 0u; i < sizeof sizes / sizeof sizes[0]; ++i) {
-        (*reader).size = sizes[i];
+        Page_setSize(reader, sizes[i]);
         checkAdmission(reader, PAGE_INVALID, "storage");
     }
-    (*reader).size = SIZE;
+    Page_setSize(reader, SIZE);
     checkAdmission(reader, PAGE_OK, nullptr);
     assert(Page_id(reader) == 91u && Page_used(reader) == 13u);
     assert(Page_kind(reader) == PAGE_KIND_LEAF && !Page_isDirty(reader));

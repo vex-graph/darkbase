@@ -40,14 +40,23 @@ static u32 failures;
     } \
 } while (false)
 
+;;GETTER
+static inline const u8 *TestSecretContext_secret(const TestSecretContext *c) { return (*c).secret; }
+;;GETTER
+static inline u8 *TestSecretContext_secretMut(TestSecretContext *c) { return (*c).secret; }
+;;GETTER
+static inline bool TestSecretContext_present(const TestSecretContext *c) { return (*c).present; }
+;;SETTER
+static inline fn TestSecretContext_setPresent(TestSecretContext *c, bool present) { (*c).present = present; }
+
 static bool secretStore(any opaqueContext, const char *service,
                         const char *account, const u8 *secret, bytes length) {
     TestSecretContext *context = (TestSecretContext*) opaqueContext;
     if (context == nullptr || service == nullptr || account == nullptr || secret == nullptr ||
-        length != sizeof (*context).secret)
+        length != sizeof(((TestSecretContext) {0}).secret))
         return false;
-    memcpy((*context).secret, secret, length);
-    (*context).present = true;
+    memcpy(TestSecretContext_secretMut(context), secret, length);
+    TestSecretContext_setPresent(context, true);
     return true;
 }
 
@@ -58,10 +67,11 @@ static bool secretLoad(any opaqueContext, const char *service,
     if (outLength != nullptr)
         *outLength = 0u;
     if (context == nullptr || service == nullptr || account == nullptr || dest == nullptr ||
-        outLength == nullptr || !(*context).present || capacity < sizeof (*context).secret)
+        outLength == nullptr || !TestSecretContext_present(context) ||
+        capacity < sizeof(((TestSecretContext) {0}).secret))
         return false;
-    memcpy(dest, (*context).secret, sizeof (*context).secret);
-    *outLength = sizeof (*context).secret;
+    memcpy(dest, TestSecretContext_secret(context), sizeof(((TestSecretContext) {0}).secret));
+    *outLength = sizeof(((TestSecretContext) {0}).secret);
     return true;
 }
 
@@ -70,13 +80,13 @@ static bool secretRemove(any opaqueContext, const char *service,
     TestSecretContext *context = (TestSecretContext*) opaqueContext;
     if (context == nullptr || service == nullptr || account == nullptr)
         return false;
-    memset((*context).secret, 0, sizeof (*context).secret);
-    (*context).present = false;
+    memset(TestSecretContext_secretMut(context), 0, sizeof(((TestSecretContext) {0}).secret));
+    TestSecretContext_setPresent(context, false);
     return true;
 }
 
 static u32 codeAt(const TestSecretContext *context, u64 seconds) {
-    return Totp_code((*context).secret, sizeof (*context).secret, seconds,
+    return Totp_code(TestSecretContext_secret(context), sizeof(((TestSecretContext) {0}).secret), seconds,
                      TOTP_DIGITS_DEFAULT, TOTP_STEP_SECONDS_DEFAULT);
 }
 
