@@ -1,7 +1,8 @@
-// Owner test for the HeadlessService startup, admin gate and recovery contract.
+/** Owner test for the HeadlessService startup, admin gate and recovery contract. */
 
 #include "vex.h"
 #include "service/service.h"
+#include "service_test.h"
 #include "security/password.h"
 #include "security/totp.h"
 #include "time/datetime.h"
@@ -19,15 +20,11 @@
  * request admission. First boot emits one TOTP setup secret and creates the
  * one-time admin. Password + TOTP login is replay-protected, bootstrap password
  * replacement is mandatory, and explicit enable is persisted before admission.
- * STRUCT FIELDS: none — procedural owner harness.
+ * STRUCT FIELDS: none, procedural owner harness.
  * FUNCTION REGISTRY: main, secretStore, secretLoad, secretRemove, check.
  * ============================================================================
  */
 
-typedef struct TestSecretContext {
-    u8 secret[20];
-    bool present;
-} TestSecretContext;
 
 static u32 checks;
 static u32 failures;
@@ -41,16 +38,28 @@ static u32 failures;
 } while (false)
 
 ;;GETTER
-static inline const u8 *TestSecretContext_secret(const TestSecretContext *c) { return (*c).secret; }
+static inline const u8 *TestSecretContext_secret(const TestSecretContext *c)
+{
+    return (*c).secret;
+}
 ;;GETTER
-static inline u8 *TestSecretContext_secretMut(TestSecretContext *c) { return (*c).secret; }
+static inline u8 *TestSecretContext_secretMut(TestSecretContext *c)
+{
+    return (*c).secret;
+}
 ;;GETTER
-static inline bool TestSecretContext_present(const TestSecretContext *c) { return (*c).present; }
+static inline bool TestSecretContext_present(const TestSecretContext *c)
+{
+    return (*c).present;
+}
 ;;SETTER
-static inline fn TestSecretContext_setPresent(TestSecretContext *c, bool present) { (*c).present = present; }
+static inline fn TestSecretContext_setPresent(TestSecretContext *c, bool present)
+{
+    (*c).present = present;
+}
 
-static bool secretStore(any opaqueContext, const char *service,
-                        const char *account, const u8 *secret, bytes length) {
+static bool secretStore(any opaqueContext, const utf8 *service,
+                        const utf8 *account, const u8 *secret, bytes length) {
     TestSecretContext *context = (TestSecretContext*) opaqueContext;
     if (context == nullptr || service == nullptr || account == nullptr || secret == nullptr ||
         length != sizeof(((TestSecretContext) {0}).secret))
@@ -60,8 +69,8 @@ static bool secretStore(any opaqueContext, const char *service,
     return true;
 }
 
-static bool secretLoad(any opaqueContext, const char *service,
-                       const char *account, u8 *dest, bytes capacity,
+static bool secretLoad(any opaqueContext, const utf8 *service,
+                       const utf8 *account, u8 *dest, bytes capacity,
                        bytes *outLength) {
     TestSecretContext *context = (TestSecretContext*) opaqueContext;
     if (outLength != nullptr)
@@ -75,8 +84,8 @@ static bool secretLoad(any opaqueContext, const char *service,
     return true;
 }
 
-static bool secretRemove(any opaqueContext, const char *service,
-                         const char *account) {
+static bool secretRemove(any opaqueContext, const utf8 *service,
+                         const utf8 *account) {
     TestSecretContext *context = (TestSecretContext*) opaqueContext;
     if (context == nullptr || service == nullptr || account == nullptr)
         return false;
@@ -99,7 +108,7 @@ i32 main() {
         CHECK(!HeadlessService_isAcceptingRequests(emptyService));
         CHECK(!HeadlessService_isRequestAllowed(emptyService));
         CHECK(HeadlessService_getPasswordIterations(emptyService) == PASSWORD_ITERATIONS_DEFAULT);
-        char projection[256];
+        utf8 projection[256];
         bool truncated = true;
         CHECK(HeadlessService_toString(nullptr, projection, sizeof projection, &truncated));
         CHECK(!truncated && strcmp(projection, "nullptr") == 0);
@@ -114,11 +123,11 @@ i32 main() {
     }
     CHECK(HeadlessService_1(nullptr) == nullptr);
 
-    char directory[] = "/tmp/darkbase-headless-XXXXXX";
+    utf8 directory[] = "/tmp/darkbase-headless-XXXXXX";
     CHECK(mkdtemp(directory) != nullptr);
     if (failures != 0u)
         return EXIT_FAILURE;
-    char databasePath[256];
+    utf8 databasePath[256];
     i32 pathLength = snprintf(databasePath, sizeof databasePath, "%s/admin.vexdb", directory);
     CHECK(pathLength > 0 && (bytes) pathLength < sizeof databasePath);
     if (pathLength <= 0 || (bytes) pathLength >= sizeof databasePath)
@@ -133,7 +142,7 @@ i32 main() {
     CHECK(!HeadlessService_setPasswordIterations(service, PASSWORD_ITERATIONS_MIN - 1u));
     CHECK(HeadlessService_setPasswordIterations(service, PASSWORD_ITERATIONS_MIN));
     CHECK(HeadlessService_getPasswordIterations(service) == PASSWORD_ITERATIONS_MIN);
-    char setupSecret[64];
+    utf8 setupSecret[64];
     bytes setupLength = 0u;
     CHECK(!HeadlessService_start(service, nullptr, nullptr, nullptr, nullptr,
                                  setupSecret, sizeof setupSecret, &setupLength));

@@ -1,9 +1,11 @@
-// Store owner: one real file containing bootstrap, redo and mapped data pages.
-// Proves page-level durable publication/reopen, logical id reuse, retained journal
-// exhaustion, rejection preservation, and real child exits at commit boundaries.
-// Single serialized owner, no network/provider/GUI or hardware power-loss claim.
-// Resource pressure is test-owned; no host-wide disk/RAM exhaustion. No thread-safe
-// API is offered, so racing mutation/reset is outside this owner's contract.
+/**
+ * Store owner: one real file containing bootstrap, redo and mapped data pages.
+ * Proves page-level durable publication/reopen, logical id reuse, retained journal
+ * exhaustion, rejection preservation, and real child exits at commit boundaries.
+ * Single serialized owner, no network/provider/GUI or hardware power-loss claim.
+ * Resource pressure is test-owned; no host-wide disk/RAM exhaustion. No thread-safe
+ * API is offered, so racing mutation/reset is outside this owner's contract.
+ */
 #define _POSIX_C_SOURCE 200809L
 #define _DARWIN_C_SOURCE 1
 
@@ -23,13 +25,15 @@
 #define TEST_JOURNAL 65536u
 #define TEST_RESERVATION 131072u
 #define TEST_LIVE_PAGES 48u
-static char directory[1024];
+static utf8 directory[1024];
 static u32 fixtureId;
 
 #ifdef STORE_FAULT_TESTS
-// Compile-time substitution ONLY in Store's test object. The real production
-// source contains no fault switch; these wrappers delegate to the actual R2/Wal
-// functions except for the one explicitly armed next failure.
+/**
+ * Compile-time substitution ONLY in Store's test object. The real production
+ * source contains no fault switch; these wrappers delegate to the actual R2/Wal
+ * functions except for the one explicitly armed next failure.
+ */
 static u32 fault;
 u32 StoreTest_mapWrite(ReGrowableMappedFile *owner, bytes offset, const u8 *src, bytes length) {
     if (fault == 1u) { fault = 0u; return 2u; }
@@ -53,7 +57,7 @@ WalCode StoreTest_walSync(Wal *owner) {
 }
 #endif
 
-static fn fixture(char path[1024]) {
+static fn fixture(utf8 path[1024]) {
     i32 n = snprintf(path, 1024u, "%s/store-%u.vexdb", directory, ++fixtureId);
     assert(n > 0 && n < 1024);
 }
@@ -76,9 +80,9 @@ static fn crashObserver(any context, u32 phase) {
 }
 
 static fn lifecycle() {
-    char path[1024];
+    utf8 path[1024];
     fixture(path);
-    assert(Store_1(path) == nullptr); // missing is not implicit creation
+    assert(Store_1(path) == nullptr);
     Store *store = Store(path, TEST_RESERVATION, TEST_PAGE, TEST_JOURNAL);
     assert(store != nullptr && Store_isOpen(store) && !Store_isBlocked(store));
     assert(Store_pageSize(store) == TEST_PAGE && Store_reserved(store) == TEST_RESERVATION);
@@ -103,7 +107,6 @@ static fn lifecycle() {
         payload[0] = (u8) i;
         readEquals(store, ids[i], payload, sizeof payload);
     }
-    // Rejection does not change the output id, count, sequence or survivor bytes.
     u32 out = UINT32_MAX;
     u64 sequence = Store_sequence(store);
     assert(Store_add(store, PAGE_KIND_LEAF, payload, sizeof payload + 1u, &out) == STORE_INVALID);
@@ -119,7 +122,6 @@ static fn lifecycle() {
     assert(Store_page_read(store, ids[0], small, sizeof small, &length, &kind, &cut) == STORE_TRUNCATED);
     assert(cut && length == 123u && kind == 124u && small[0] == 0x55);
     assert(Store_page_read(store, ids[0], nullptr, 0u, &length, &kind, &cut) == STORE_INVALID);
-    // Release and reallocate the SAME logical page id without raising the high water.
     assert(Store_page_release(store, ids[1]) == STORE_OK);
     assert(Store_page_release(store, ids[1]) == STORE_INVALID);
     assert(Store_page_write(store, ids[1], PAGE_KIND_LEAF, payload, 1u) == STORE_INVALID);
@@ -128,7 +130,7 @@ static fn lifecycle() {
     assert(out == ids[1] && Store_pageCount(store) == TEST_LIVE_PAGES && Store_freeHead(store) == 0u);
     assert(Store_page_write(store, ids[0], PAGE_KIND_LEAF, (const u8*) "changed", 7u) == STORE_OK);
     assert(Store_sync(store) == STORE_OK);
-    char text[768];
+    utf8 text[768];
     assert(Store_toString(store, text, sizeof text, &cut) && !cut);
     assert(strstr(text, "Store(open=1") != nullptr);
     assert(Store_toStringStruct(store, text, sizeof text, &cut) && !cut);
@@ -146,7 +148,6 @@ static fn lifecycle() {
         payload[0] = (u8) i;
         readEquals(store, ids[i], payload, sizeof payload);
     }
-    // Persist the free chain through reopen, then consume it in LIFO order.
     assert(Store_page_release(store, ids[2]) == STORE_OK);
     assert(Store_page_release(store, ids[3]) == STORE_OK);
     Store_free(store);
@@ -161,9 +162,8 @@ static fn lifecycle() {
 }
 
 static fn boundedResources() {
-    char path[1024];
+    utf8 path[1024];
     fixture(path);
-    // Exactly two data pages; journal ample for release/reuse/refill history.
     bytes journal = 8192u;
     Store *store = Store_4(path, journal + TEST_PAGE * 3u, TEST_PAGE, journal);
     assert(store != nullptr);
@@ -185,7 +185,6 @@ static fn boundedResources() {
     readEquals(store, a, (const u8*) "C", 1u);
     Store_free(store);
     assert(unlink(path) == 0);
-    // Small explicit redo region: one full-page redo fits, the next must reject.
     fixture(path);
     store = Store_4(path, 16384u, TEST_PAGE, TEST_PAGE * 2u);
     assert(store != nullptr);
@@ -203,7 +202,7 @@ static fn boundedResources() {
 }
 
 static fn interruptedCommit(u32 phase) {
-    char path[1024];
+    utf8 path[1024];
     fixture(path);
     Store *store = Store_4(path, TEST_RESERVATION, TEST_PAGE, TEST_JOURNAL);
     assert(store != nullptr);
@@ -218,13 +217,11 @@ static fn interruptedCommit(u32 phase) {
         Store_setCommitObserver(writer, crashObserver, &phase);
         assert(Store_getCommitObserver(writer) == crashObserver && Store_getObserverContext(writer) == &phase);
         (discard) Store_page_write(writer, id, PAGE_KIND_LEAF, (const u8*) "durable-redo", 12u);
-        _exit(9); // must not return from the selected actual commit boundary
+        _exit(9);
     }
     i32 status = 0;
     assert(waitpid(child, &status, 0) == child && WIFEXITED(status));
     assert(WEXITSTATUS(status) == 100 + (i32) phase);
-    // Additionally destroy the target data frame after the child's durable redo:
-    // recovery must repair a torn page, not merely adopt a lucky page-cache write.
     FILE *raw = fopen(path, "r+b.sh");
     assert(raw != nullptr && fseek(raw, TEST_PAGE + TEST_JOURNAL, SEEK_SET) == 0);
     u8 torn[TEST_PAGE] = {0};
@@ -242,7 +239,7 @@ static fn interruptedCommit(u32 phase) {
 }
 
 static fn invalidAdmission() {
-    char path[1024];
+    utf8 path[1024];
     fixture(path);
     assert(Store_4(nullptr, 4096u, TEST_PAGE, 1024u) == nullptr);
     assert(Store_4(path, 4096u, 513u, 1024u) == nullptr);
@@ -266,14 +263,13 @@ static fn invalidAdmission() {
     assert(Store_sequence(nullptr) == 0u && Store_exhaustionCount(nullptr) == 0u);
     Store_setCommitObserver(nullptr, nullptr, nullptr);
     assert(Store_getCommitObserver(nullptr) == nullptr && Store_getObserverContext(nullptr) == nullptr);
-    char text[64];
+    utf8 text[64];
     bool cut = true;
     assert(Store_toString(nullptr, text, sizeof text, &cut) && !cut && strcmp(text, "nullptr") == 0);
     assert(Store_toStringStruct(nullptr, text, sizeof text, &cut) && strcmp(text, "nullptr") == 0);
     for (i32 i = STORE_OK; i <= STORE_TRUNCATED; ++i)
         assert(strcmp(Store_codeName((StoreCode) i), "unknown") != 0);
     assert(strcmp(Store_codeName((StoreCode) 99), "unknown") == 0);
-    // Bootstrap damage fails closed instead of admitting a guessed geometry.
     fixture(path);
     Store *store = Store_4(path, TEST_RESERVATION, TEST_PAGE, TEST_JOURNAL);
     assert(store != nullptr);
@@ -286,15 +282,13 @@ static fn invalidAdmission() {
 }
 
 static fn forgedBaseline() {
-    char path[1024];
+    utf8 path[1024];
     fixture(path);
     Store *store = Store_4(path, TEST_RESERVATION, TEST_PAGE, TEST_JOURNAL);
     assert(store != nullptr);
     u32 id = 0u;
     assert(Store_add(store, PAGE_KIND_LEAF, (const u8*) "baseline", 8u, &id) == STORE_OK);
     Store_free(store);
-    // A CRC-valid region header and record are NOT a supported checkpoint base.
-    // Store always replays from immutable bootstrap state, so base must be zero.
     FILE *raw = fopen(path, "r+b.sh");
     assert(raw != nullptr && fseek(raw, TEST_PAGE, SEEK_SET) == 0);
     u8 header[WAL_HEADER_BYTES];
@@ -319,7 +313,7 @@ static fn forgedBaseline() {
 #ifdef STORE_FAULT_TESTS
 static fn uncertainIO() {
     for (u32 stage = 1u; stage <= 5u; ++stage) {
-        char path[1024];
+        utf8 path[1024];
         fixture(path);
         Store *store = Store_4(path, TEST_RESERVATION, TEST_PAGE, TEST_JOURNAL);
         assert(store != nullptr);
@@ -347,10 +341,10 @@ static fn uncertainIO() {
 }
 #endif
 
-i32 main(i32 argc, char **argv) {
+i32 main(i32 argc, utf8 **argv) {
     bool leakSafe = argc == 2 && strcmp(argv[1], "--leak-safe") == 0;
     assert(argc == 1 || leakSafe);
-    const char *tmp = getenv("TMPDIR");
+    const utf8 *tmp = getenv("TMPDIR");
     i32 n = snprintf(directory, sizeof directory, "%s/store-owner-XXXXXX", tmp != nullptr ? tmp : "/tmp");
     assert(n > 0 && (bytes) n < sizeof directory && mkdtemp(directory) != nullptr);
     invalidAdmission();
@@ -360,13 +354,10 @@ i32 main(i32 argc, char **argv) {
 #ifdef STORE_FAULT_TESTS
     uncertainIO();
 #endif
-    // Apple's atExit leak monitor cannot supervise the deliberate _exit children;
-    // only that separate instrumentation invocation excludes these child cases.
-    // Normal and sanitizer owner invocations ALWAYS execute all three boundaries.
     if (!leakSafe)
         for (u32 phase = STORE_AFTER_LOG_SYNC; phase <= STORE_AFTER_DATA_SYNC; ++phase)
             interruptedCommit(phase);
-    assert(rmdir(directory) == 0); // one database file, no sidecar artifacts
+    assert(rmdir(directory) == 0);
     Memory_freeAll();
     puts(leakSafe ? "store_test: PASS (leak instrumentation: non-fork lifetime and IO-fault paths)" :
          "store_test: PASS (48 live full pages; reuse, two capacity bounds, 3 child crash boundaries)");

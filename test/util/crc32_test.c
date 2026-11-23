@@ -1,6 +1,8 @@
-// Owner: darkbase-engine/src/util/crc32.c — reflected IEEE CRC32.
-// Proves the published check vector, incremental equivalence, and empty-span
-// identity; database and WAL owners cover its stored-format call sites.
+/**
+ * Owner: darkbase-engine/src/util/crc32.c, reflected IEEE CRC32.
+ * Proves the published check vector, incremental equivalence, and empty-span
+ * identity; database and WAL owners cover its stored-format call sites.
+ */
 
 #include "vex.h"
 #include "util/crc32.h"

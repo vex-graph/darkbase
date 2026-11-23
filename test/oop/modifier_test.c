@@ -1,11 +1,13 @@
-// Owner: oop/modifier.c — the frozen field-modifier keyword set.
-//
-// Proves the three axes validate, the 80 declaration presets and the i16
-// forms agree with the orthogonal constructor, the terminal parser accepts the
-// same words the C schema uses (free order, defaults by absence) and rejects
-// unknown/duplicate/overlong input with exactly one cold diagnostic, and both
-// projections round-trip. A Modifier is a value record: nothing is allocated,
-// so there is no lifetime to leak.
+/**
+ * Owner: oop/modifier.c, the frozen field-modifier keyword set.
+ *
+ * Proves the three axes validate, the 80 declaration presets and the i16
+ * forms agree with the orthogonal constructor, the terminal parser accepts the
+ * same words the C schema uses (free order, defaults by absence) and rejects
+ * unknown/duplicate/overlong input with exactly one cold diagnostic, and both
+ * projections round-trip. A Modifier is a value record: nothing is allocated,
+ * so there is no lifetime to leak.
+ */
 
 #include "vex.h"
 #include "oop/modifier.h"
@@ -15,13 +17,15 @@
 #include <string.h>
 #include <unistd.h>
 
-// --- A captured cold diagnostic must be exactly one "[vex]" line. -----------
-// A function type is spelled `typedef Modifier Name();` — never
-// `Modifier (*Name)()` — because the constructor macro `Modifier(...)`
-// would otherwise expand on the `Modifier (` sequence.
+/**
+ * --- A captured cold diagnostic must be exactly one "[vex]" line. -----------
+ * A function type is spelled `typedef Modifier Name();`, never
+ * `Modifier (*Name)()`, because the constructor macro `Modifier(...)`
+ * would otherwise expand on the `Modifier (` sequence.
+ */
 typedef Modifier ModifierProbe();
 
-static bytes captureProbe(ModifierProbe probe, char *out, bytes cap) {
+static bytes captureProbe(ModifierProbe probe, utf8 *out, bytes cap) {
     FILE *capture = tmpfile();
     assert(capture != nullptr);
     assert(fflush(stderr) == 0);
@@ -38,27 +42,39 @@ static bytes captureProbe(ModifierProbe probe, char *out, bytes cap) {
     return n;
 }
 
-static bytes lineCount(const char *text) {
+static bytes lineCount(const utf8 *text) {
     bytes lines = 0u;
-    for (const char *p = text; *p != '\0'; ++p)
+    for (const utf8 *p = text; *p != '\0'; ++p)
         if (*p == '\n')
             ++lines;
     return lines;
 }
 
-static Modifier probeNull() { return Modifier_parse(nullptr); }
-static Modifier probeUnknown() { return Modifier_parse("bogus"); }
-static Modifier probeDuplicate() { return Modifier_parse("public public"); }
+static Modifier probeNull()
+{
+    return Modifier_parse(nullptr);
+}
+static Modifier probeUnknown()
+{
+    return Modifier_parse("bogus");
+}
+static Modifier probeDuplicate()
+{
+    return Modifier_parse("public public");
+}
 static Modifier probeOverlong() {
-    return Modifier_parse("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); // 32 bytes
+    return Modifier_parse("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 }
 static Modifier probeApplyUnknown() {
     return Modifier_applyToken(Modifier_0(), "bogus");
 }
-static Modifier probeQuiet() { return Modifier_parse("public hashed nullable"); }
+static Modifier probeQuiet()
+{
+    return Modifier_parse("public hashed nullable");
+}
 
-static fn checkReject(ModifierProbe probe, ModifierCode expected, const char *fragment) {
-    char text[512];
+static fn checkReject(ModifierProbe probe, ModifierCode expected, const utf8 *fragment) {
+    utf8 text[512];
     bytes n = captureProbe(probe, text, sizeof text);
     assert(n > 0u);
     assert(lineCount(text) == 1u);
@@ -68,13 +84,12 @@ static fn checkReject(ModifierProbe probe, ModifierCode expected, const char *fr
 }
 
 static fn checkQuiet(ModifierProbe probe) {
-    char text[512];
+    utf8 text[512];
     bytes n = captureProbe(probe, text, sizeof text);
     assert(n == 0u);
 }
 
 i32 main() {
-    // --- Defaults and constructors -----------------------------------------
     Modifier def = Modifier_0();
     assert(Modifier_equals(def, MODIFIER_DEFAULT));
     assert(Modifier_equals(Modifier(), def));
@@ -94,7 +109,6 @@ i32 main() {
     assert(Modifier_isTransient(five) && Modifier_isShared(five));
     assert(Modifier_isAdmissible(five));
 
-    // --- Presets: full and i16 forms agree -------------------------------
     assert(Modifier_equals(MODIFIER_PUBLIC_HASHED, MODIFIER_PUBLIC_HASHED_NULLABLE));
     assert(Modifier_equals(MODIFIER_PUBLIC_HASHED, three));
     assert(Modifier_equals(MODIFIER_PUBLIC_SERVER_SEALED_NONNULL_TRANSIENT_STATIC, five));
@@ -105,7 +119,6 @@ i32 main() {
     assert(Modifier_getNullability(extremes) == MODIFIER_NONNULL);
     assert(Modifier_isTransient(extremes) && Modifier_isShared(extremes));
 
-    // --- Validation names the offending axis -------------------------------
     Modifier badAccess = def;
     badAccess.access = 9u;
     assert(Modifier_validate(badAccess) == MODIFIER_BAD_ACCESS);
@@ -118,7 +131,6 @@ i32 main() {
     assert(Modifier_validate(badNullability) == MODIFIER_BAD_NULLABILITY);
     assert(Modifier_validate(def) == MODIFIER_OK);
 
-    // --- Predicates and warnings -------------------------------------------
     assert(Modifier_isOneWay(MODIFIER_PUBLIC_HASHED));
     assert(Modifier_isReversible(MODIFIER_PRIVATE_CLIENT_SEALED));
     assert(Modifier_isReversible(MODIFIER_PRIVATE_SERVER_SEALED));
@@ -137,7 +149,6 @@ i32 main() {
            (u32) MODIFIER_WARNING_LOSSY);
     assert(Modifier_warnings(def) == MODIFIER_WARNING_NONE);
 
-    // --- Names --------------------------------------------------------------
     assert(strcmp(Modifier_accessName(MODIFIER_ACCESS_PUBLIC), "public") == 0);
     assert(strcmp(Modifier_protectionName(MODIFIER_PROTECTION_CLIENT_SEALED),
                   "client-sealed") == 0);
@@ -146,18 +157,17 @@ i32 main() {
     assert(strcmp(Modifier_warningName(MODIFIER_WARNING_LOSSY), "lossy") == 0);
     assert(strcmp(Modifier_accessName((ModifierAccess) 9), "unknown") == 0);
 
-    // --- Parser: the terminal path meets the C schema ----------------------
     assert(Modifier_equals(Modifier_parse(""), def));
     assert(Modifier_equals(Modifier_parse("   \t\r\n "), def));
     assert(Modifier_equals(Modifier_parse("public hashed nullable"), three));
-    assert(Modifier_equals(Modifier_parse("nullable public hashed"), three)); // order free
+    assert(Modifier_equals(Modifier_parse("nullable public hashed"), three));
     assert(Modifier_equals(Modifier_parse("public server-sealed nonnull transient static"), five));
     assert(Modifier_equals(Modifier_parse("private truncated nonnull transient static"), extremes));
     assert(Modifier_code(Modifier_parse("public hashed")) == MODIFIER_OK);
 
     Modifier bad = Modifier_parse("bogus");
     assert(Modifier_code(bad) == MODIFIER_BAD_TOKEN);
-    assert(Modifier_equals(bad, def)); // rejection leaves the safe default
+    assert(Modifier_equals(bad, def));
     assert(Modifier_code(Modifier_parse("public public")) == MODIFIER_DUPLICATE);
     assert(Modifier_code(Modifier_parse(nullptr)) == MODIFIER_INVALID);
     assert(Modifier_code(Modifier_applyToken(Modifier_0(), "bogus")) == MODIFIER_BAD_TOKEN);
@@ -170,8 +180,7 @@ i32 main() {
     checkReject(probeApplyUnknown, MODIFIER_BAD_TOKEN, "unknown modifier token");
     checkQuiet(probeQuiet);
 
-    // --- Projections --------------------------------------------------------
-    char text[256];
+    utf8 text[256];
     bool cut = true;
     assert(Modifier_toString(three, text, sizeof text, &cut) && !cut);
     assert(strcmp(text, "public:hashed:nullable") == 0);
@@ -179,7 +188,7 @@ i32 main() {
     assert(strcmp(text, "public:server-sealed:nonnull:transient:static") == 0);
     assert(Modifier_toString(def, text, sizeof text, &cut) && !cut);
     assert(strcmp(text, "private:plain:nullable") == 0);
-    assert(!Modifier_toString(five, text, 5u, &cut) && cut); // bounded, never silent
+    assert(!Modifier_toString(five, text, 5u, &cut) && cut);
     assert(!Modifier_toString(five, nullptr, 0u, &cut) && cut);
 
     assert(Modifier_toStringStruct(five, text, sizeof text, &cut) && !cut);

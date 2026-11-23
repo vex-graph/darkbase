@@ -7,7 +7,7 @@ graph for the darkbase-engine owner targets, runs them with assertions active,
 parses the aggregate, and exits nonzero on any failure.
 
 The engine's own source set is declared in the build graph (`setup_darkbase` in
-`tools/workspace.c`), so the graph is the authority for how the owners link —
+`tools/workspace.c`), so the graph is the authority for how the owners link,
 hand-listing vexspoke/relational-engine objects here would silently drift from
 it. This runner therefore drives that graph instead of duplicating it.
 

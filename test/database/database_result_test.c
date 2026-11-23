@@ -1,4 +1,4 @@
-// darkbase-engine/test/database/database_result_test.c — owner test for database/database_result.c.
+/** darkbase-engine/test/database/database_result_test.c, owner test for database/database_result.c. */
 
 #include "vex.h"
 #include <stdio.h>
@@ -12,19 +12,20 @@
 #include "reflection/struct.h"
 #include "struct/chunked_list.h"
 #include "test_support.h"
+#include "database_test.h"
 
 ;;OVERVIEW
 /**
  * ============================================================================
  * MODULE: DatabaseResultTest (darkbase-engine/test/database/database_result_test.c)
- * LEVEL: L3 — Module Code (headless verification harness)
+ * LEVEL: L3, Module Code (headless verification harness)
  * ============================================================================
  * Owner test for the dest-last row cursor: a DatabaseResult borrows one
  * entity's row-pointer list and walks it without copying; next() writes into a
  * caller destination, rewind restarts, and the count is the construction
  * snapshot. Also proves the empty cursor and the null-source rejection.
  *
- * STRUCT FIELDS: none — procedural test harness.
+ * STRUCT FIELDS: none, procedural test harness.
  *
  * FUNCTION REGISTRY:
  *   - main()
@@ -44,9 +45,6 @@ static i32 g_checks = 0;
         }                                                                 \
     } while (0)
 
-typedef struct Row2 {
-    u32 v;
-} Row2;
 
 /** Verifies an empty cursor snapshots zero rows and handles null inputs safely. */
 static fn testEmptyCursor() {
@@ -62,15 +60,14 @@ static fn testEmptyCursor() {
 
     any row = (any) (pointer) 1u;
     CHECK(DatabaseResult_next(r, &row) == false);
-    CHECK(row == (any) (pointer) 1u); // untouched on false
+    CHECK(row == (any) (pointer) 1u);
     CHECK(DatabaseResult_next(r, nullptr) == false);
     CHECK(DatabaseResult_next(nullptr, &row) == false);
 
-    DatabaseResult_rewind(nullptr); // no crash
+    DatabaseResult_rewind(nullptr);
     CHECK(DatabaseResult_count(nullptr) == 0u);
     DatabaseResult_free(nullptr);
 
-    // A null row source is a cold rejection.
     CHECK(DatabaseResult_1(nullptr) == nullptr);
 
     DatabaseResult_free(r);
@@ -105,7 +102,6 @@ static fn testWalk() {
     }
     CHECK(DatabaseResult_count(r) == 8u);
 
-    // Each next() yields the exact bound pointer, in insertion order.
     for (u32 i = 0u; i < 8u; i++) {
         any got = nullptr;
         CHECK(DatabaseResult_next(r, &got));
@@ -117,13 +113,11 @@ static fn testWalk() {
     CHECK(DatabaseResult_next(r, &past) == false);
     CHECK(past == (any) (pointer) 2u);
 
-    // Rewind replays the same rows.
     DatabaseResult_rewind(r);
     CHECK(DatabaseResult_position(r) == 0u);
     any first = nullptr;
     CHECK(DatabaseResult_next(r, &first) && first == (any) &rows[0]);
 
-    // Selecting an absent entity rejects.
     CHECK(Database_select(db, "ghost") == nullptr);
     CHECK(Database_errorCode(db) == DATABASE_ABSENT);
 
@@ -154,7 +148,7 @@ static fn testOwnedPointerList() {
         any found = nullptr;
         CHECK(DatabaseResult_next(result, &found) && found == &row);
         DatabaseResult_free(result);
-        CHECK(row.v == 77u); // freeing result only releases its pointer-list container
+        CHECK(row.v == 77u);
     } else {
         ChunkedList_free(rows);
     }
@@ -168,12 +162,12 @@ static fn testStrings() {
     CHECK(r != nullptr);
     if (!r)
         return;
-    char buf[96];
+    utf8 buf[96];
     bool truncated = true;
     DatabaseResult_toString(r, buf, sizeof(buf), &truncated);
     CHECK(truncated == false && strcmp(buf, "DatabaseResult(0/0)") == 0);
 
-    char tiny[4];
+    utf8 tiny[4];
     DatabaseResult_toString(r, tiny, sizeof(tiny), &truncated);
     CHECK(truncated == true);
 

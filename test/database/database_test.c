@@ -1,4 +1,4 @@
-// darkbase-engine/test/database/database_test.c — owner test for database/database.c.
+/** darkbase-engine/test/database/database_test.c, owner test for database/database.c. */
 
 #include "vex.h"
 #include <stdio.h>
@@ -15,12 +15,13 @@
 #include "reflection/struct.h"
 #include "store/store.h"
 #include "test_support.h"
+#include "database_test.h"
 
 ;;OVERVIEW
 /**
  * ============================================================================
  * MODULE: DatabaseTest (darkbase-engine/test/database/database_test.c)
- * LEVEL: L3 — Module Code (headless verification harness)
+ * LEVEL: L3, Module Code (headless verification harness)
  * ============================================================================
  * Owner test for the L2 Database switchboard: register a reflection Struct as
  * an entity, bind caller-owned live rows, look them up, and report cold
@@ -28,7 +29,7 @@
  * borrowed pointers; the test proves they are returned unchanged and that their
  * slots stay stable across growth.
  *
- * STRUCT FIELDS: none — procedural test harness.
+ * STRUCT FIELDS: none, procedural test harness.
  *
  * PRIVATE HELPER RECORD:
  *   DatabaseCrashProbe { u32 commits; } // completed redo-marker callbacks
@@ -48,20 +49,32 @@
 static i32 g_fail = 0;
 static i32 g_checks = 0;
 
-typedef struct DatabaseCrashProbe {
-    u32 commits;
-} DatabaseCrashProbe;
 
 ;;GETTER
-static inline u32 DatabaseCrashProbe_commits(const DatabaseCrashProbe *probe) { return (*probe).commits; }
+static inline u32 DatabaseCrashProbe_commits(const DatabaseCrashProbe *probe)
+{
+    return (*probe).commits;
+}
 ;;SETTER
-static inline fn DatabaseCrashProbe_setCommits(DatabaseCrashProbe *probe, u32 commits) { (*probe).commits = commits; }
+static inline fn DatabaseCrashProbe_setCommits(DatabaseCrashProbe *probe, u32 commits)
+{
+    (*probe).commits = commits;
+}
 ;;GETTER
-static inline u32 Row_id(const Row *r) { return (*r).id; }
+static inline u32 Row_id(const Row *r)
+{
+    return (*r).id;
+}
 ;;GETTER
-static inline i32 Row_health(const Row *r) { return (*r).health; }
+static inline i32 Row_health(const Row *r)
+{
+    return (*r).health;
+}
 ;;SETTER
-static inline fn Row_setHealth(Row *r, i32 health) { (*r).health = health; }
+static inline fn Row_setHealth(Row *r, i32 health)
+{
+    (*r).health = health;
+}
 
 /** Terminates after the root redo marker is durable but before page apply. */
 static fn crashAtDatabaseRoot(any context, u32 phase) {
@@ -83,10 +96,6 @@ static fn crashAtDatabaseRoot(any context, u32 phase) {
         }                                                                 \
     } while (0)
 
-typedef struct Row {
-    pointer id;
-    i32 health;
-} Row;
 
 /** Verifies database construction, type identity, null-safe access, and destruction. */
 static fn testConstructorAndNull() {
@@ -110,10 +119,10 @@ static fn testConstructorAndNull() {
     CHECK(Database_count(nullptr, "x") == 0u);
     CHECK(Database_lastError(nullptr, nullptr, 0u) == -1);
 
-    Database_free(nullptr); // no crash
+    Database_free(nullptr);
     Database_free(db);
 
-    char buf[64];
+    utf8 buf[64];
     bool truncated = true;
     Database_toString(nullptr, buf, sizeof(buf), &truncated);
     CHECK(truncated == false && strcmp(buf, "nullptr") == 0);
@@ -139,12 +148,11 @@ static fn testDefineAndLookup() {
     CHECK(Database_entityCount(db) == 2u);
     CHECK(Database_entityIndex(db, "player") == 0);
     CHECK(Database_entityIndex(db, "item") == 1);
-    CHECK(Database_entityIndex(db, "Player") == 0); // folded lookup
+    CHECK(Database_entityIndex(db, "Player") == 0);
     CHECK(Database_entityIndex(db, "absent") == -1);
     CHECK(Database_schema(db, "player") == player);
     CHECK(Database_schema(db, "absent") == nullptr);
 
-    // Duplicate entity names reject and are recorded.
     Struct *player2 = Struct("player");
     CHECK(player2 != nullptr);
     CHECK(Database_define(db, player2) == -1);
@@ -182,14 +190,12 @@ static fn testInsertAndRead() {
     CHECK(Database_count(db, "player") == 64u);
     CHECK(Database_errorCode(db) == DATABASE_OK);
 
-    // The exact bound pointer comes back, at its index.
     any got = Database_row(db, "player", 37u);
     CHECK(got == (any) &rows[37]);
     CHECK((*((Row*) got)).id == 137u);
-    CHECK(Database_row(db, "player", 64u) == nullptr); // out of range
+    CHECK(Database_row(db, "player", 64u) == nullptr);
     CHECK(Database_row(db, "player", 0u) == (any) &rows[0]);
 
-    // Absent entity + null argument rejection.
     CHECK(Database_insert(db, "ghost", &rows[0]) == -1);
     CHECK(Database_errorCode(db) == DATABASE_ABSENT);
     CHECK(Database_insert(db, "player", nullptr) == -1);
@@ -221,9 +227,9 @@ static fn testInsertOwned() {
     u8 oversized[sizeof(Row) + 1u] = {0};
     CHECK(Database_insertOwned(db, "player", oversized, sizeof oversized) == -1);
     CHECK(Database_count(db, "player") == 0u);
-    CHECK(Database_insert(db, "player", &borrowed) == 0); // bad owned size did not change mode
+    CHECK(Database_insert(db, "player", &borrowed) == 0);
     CHECK(Database_insertOwned(db, "player", &borrowed, sizeof borrowed) == -1);
-    CHECK(Database_count(db, "player") == 1u); // borrowed and owned rows never mix
+    CHECK(Database_count(db, "player") == 1u);
 
     Database_free(db);
     Struct_free(player);
@@ -247,7 +253,7 @@ static fn testInsertOwned() {
     CHECK(Database_insert(db, "player", &borrowed) == -1);
     CHECK(Database_count(db, "player") == 1u);
 
-    Database_free(db); // releases the copied row, not input/borrowed
+    Database_free(db);
     Struct_free(player);
 }
 
@@ -263,13 +269,12 @@ static fn testDiagnostics() {
     CHECK(Database_define(db, nullptr) == -1);
     CHECK(Database_errorCode(db) == DATABASE_INVALID);
 
-    char buf[128];
+    utf8 buf[128];
     i32 len = Database_lastError(db, buf, sizeof(buf));
     CHECK(len > 0 && (bytes) len == strlen(buf));
     CHECK(strstr(buf, "define") != nullptr);
 
-    // A too-small destination truncates silently at the byte level (bounded).
-    char tiny[4];
+    utf8 tiny[4];
     i32 tinyLen = Database_lastError(db, tiny, sizeof(tiny));
     CHECK(tinyLen == 3 && tiny[3] == '\0');
 
@@ -277,7 +282,7 @@ static fn testDiagnostics() {
     CHECK(strcmp(Database_errorText(DATABASE_DUPLICATE), "duplicate entity") == 0);
     CHECK(strcmp(Database_errorText(999), "unknown") == 0);
 
-    char proj[96];
+    utf8 proj[96];
     bool truncated = true;
     Database_toStringStruct(db, proj, sizeof(proj), &truncated);
     CHECK(truncated == false && strstr(proj, "Database {") != nullptr);
@@ -289,10 +294,10 @@ static fn testDiagnostics() {
 static fn testPersistence() {
     printf("[5] .vexdb save/load round-trip, ownership, checksum, atomicity\n");
 
-    const char *tmp = getenv("TMPDIR");
+    const utf8 *tmp = getenv("TMPDIR");
     if (tmp == nullptr)
         tmp = "/tmp";
-    char path[256];
+    utf8 path[256];
     snprintf(path, sizeof(path), "%sdarkbase_test_XXXXXX", tmp);
     i32 fd = mkstemp(path);
     CHECK(fd >= 0);
@@ -320,7 +325,6 @@ static fn testPersistence() {
     }
     CHECK(Database_save(db, path) == DATABASE_OK);
 
-    // A fresh database with the same schema loads the rows back.
     Database *db2 = Database();
     Struct *player2 = Struct("player");
     CHECK(db2 && player2);
@@ -341,12 +345,9 @@ static fn testPersistence() {
         CHECK(got != nullptr && Row_id(got) == 7u + i && Row_health(got) == (i32) (i + 1u));
     }
 
-    // Loaded rows are owned: binding a live row into them rejects.
     CHECK(Database_insert(db2, "player", &rows[0]) == -1);
     CHECK(Database_errorCode(db2) == DATABASE_INVALID);
 
-    // Owned copy-in may extend a loaded/owned entity; it copies rather than
-    // retaining the caller's pointer and is released with the loaded rows.
     Row appended = { 88u, 99 };
     CHECK(Database_insertOwned(db2, "player", &appended, sizeof appended) == 4);
     appended.health = 0;
@@ -354,11 +355,9 @@ static fn testPersistence() {
     CHECK(owned != nullptr && owned != &appended && Row_health(owned) == 99);
     CHECK(Database_count(db2, "player") == 5u);
 
-    // Re-loading into a non-empty entity rejects without mutation.
     CHECK(Database_load(db2, path) == DATABASE_DUPLICATE);
     CHECK(Database_count(db2, "player") == 5u);
 
-    // Corrupt the trailing checksum: reject and load nothing (atomic).
     FILE *fp = fopen(path, "r+b.sh");
     CHECK(fp != nullptr);
     if (fp) {
@@ -378,7 +377,7 @@ static fn testPersistence() {
         Struct_setSize(player3, (u32) sizeof(Row));
         CHECK(Database_define(db3, player3) == 0);
         CHECK(Database_load(db3, path) == DATABASE_INVALID);
-        CHECK(Database_count(db3, "player") == 0u); // nothing loaded
+        CHECK(Database_count(db3, "player") == 0u);
         Database_free(db3);
     }
     Struct_free(player3);
@@ -394,10 +393,10 @@ static fn testPersistence() {
 static fn testSafeSave() {
     printf("[6] atomic save publication (temp write + fsync + rename)\n");
 
-    const char *tmp = getenv("TMPDIR");
+    const utf8 *tmp = getenv("TMPDIR");
     if (tmp == nullptr)
         tmp = "/tmp";
-    char path[256];
+    utf8 path[256];
     snprintf(path, sizeof(path), "%sdarkbase_save_XXXXXX", tmp);
     i32 fd = mkstemp(path);
     CHECK(fd >= 0);
@@ -405,10 +404,9 @@ static fn testSafeSave() {
         return;
     close(fd);
 
-    char tpath[300];
+    utf8 tpath[300];
     snprintf(tpath, sizeof(tpath), "%s.%lld.tmp", path, (i64) getpid());
 
-    // First snapshot: 4 rows.
     Database *a = Database();
     Struct *sa = Struct("player");
     Struct_setSize(sa, (u32) sizeof(Row));
@@ -420,9 +418,8 @@ static fn testSafeSave() {
         Database_insert(a, "player", &ra[i]);
     }
     CHECK(Database_save(a, path) == DATABASE_OK);
-    CHECK(access(tpath, F_OK) != 0); // temp is renamed away, never left behind
+    CHECK(access(tpath, F_OK) != 0);
 
-    // Replace with a bigger snapshot: 6 rows.
     Database *b = Database();
     Struct *sb = Struct("player");
     Struct_setSize(sb, (u32) sizeof(Row));
@@ -436,7 +433,6 @@ static fn testSafeSave() {
     CHECK(Database_save(b, path) == DATABASE_OK);
     CHECK(access(tpath, F_OK) != 0);
 
-    // The destination now holds the new snapshot (atomic replace, not truncate).
     Database *c = Database();
     Struct *sc = Struct("player");
     Struct_setSize(sc, (u32) sizeof(Row));
@@ -445,14 +441,12 @@ static fn testSafeSave() {
     CHECK(Database_count(c, "player") == 6u);
     CHECK((*((Row*) Database_row(c, "player", 0u))).id == 2u);
 
-    // A rejected save must not touch the destination.
     Database *d = Database();
-    Struct *sd = Struct("empty"); // stride stays 0 -> save rejects
+    Struct *sd = Struct("empty");
     Database_define(d, sd);
     CHECK(Database_save(d, path) == DATABASE_INVALID);
     CHECK(access(tpath, F_OK) != 0);
 
-    // The prior snapshot survives the failed save.
     Database *e = Database();
     Struct *se = Struct("player");
     Struct_setSize(se, (u32) sizeof(Row));
@@ -476,10 +470,10 @@ static fn testSafeSave() {
 /** Verifies reflection rows publish through Store and load after a real reopen. */
 static fn testPageStorePersistence() {
     printf("[7] page-store database persistence and reopen\n");
-    const char *tmp = getenv("TMPDIR");
+    const utf8 *tmp = getenv("TMPDIR");
     if (tmp == nullptr)
         tmp = "/tmp/";
-    char path[256];
+    utf8 path[256];
     snprintf(path, sizeof(path), "%sdarkbase_pages_XXXXXX", tmp);
     i32 fd = mkstemp(path);
     CHECK(fd >= 0);
@@ -519,7 +513,7 @@ static fn testPageStorePersistence() {
     CHECK(changed != nullptr);
     if (changed != nullptr)
         Row_setHealth(changed, 999);
-    CHECK(Database_saveStore(db, store) == DATABASE_IO); // bounded journal rejects
+    CHECK(Database_saveStore(db, store) == DATABASE_IO);
     Database_free(db);
     Struct_free(schema);
     Store_free(store);
@@ -577,7 +571,7 @@ static fn testPageStorePersistence() {
         for (u32 i = 0u; i < 3u; i++) {
             Row *row = (Row*) Database_row(db, "player", i);
             CHECK(row != nullptr && Row_id(row) == source[i].id &&
-                  Row_health(row) == source[i].health); // rejected replacement preserved old root
+                  Row_health(row) == source[i].health);
         }
         pointer wanted = 42u;
         DatabaseResult *query = Database_queryEqual(db, "player", "id",
@@ -603,10 +597,10 @@ static fn testPageStorePersistence() {
 /** Proves the public Database image is recovered from a torn root-page commit. */
 static fn testPageStoreRecovery() {
     printf("[8] page-store database root recovery after process exit\n");
-    const char *tmp = getenv("TMPDIR");
+    const utf8 *tmp = getenv("TMPDIR");
     if (tmp == nullptr)
         tmp = "/tmp/";
-    char path[256];
+    utf8 path[256];
     snprintf(path, sizeof(path), "%sdarkbase_recovery_XXXXXX", tmp);
     i32 fd = mkstemp(path);
     CHECK(fd >= 0);
@@ -686,7 +680,7 @@ static fn testStructuredEqualityQuery() {
     Field_setSize(idField, (u32) sizeof((*((Row*) nullptr)).id));
     Field_setOffset(healthField, (u32) offsetof(Row, health));
     Field_setSize(healthField, (u32) sizeof((*((Row*) nullptr)).health));
-    Field_setFlags(healthField, REFLECT_FIELD_INDEXED); // the index declaration
+    Field_setFlags(healthField, REFLECT_FIELD_INDEXED);
     Field_setOffset(badField, (u32) sizeof(Row) - 1u);
     Field_setSize(badField, 2u);
     CHECK(Struct_add(schema, idField) == 0u);
@@ -758,12 +752,10 @@ static fn testStructuredEqualityQuery() {
     CHECK(Database_queryInt32Range(db, "player", "bad", 0, 10) == nullptr);
     CHECK(Database_errorCode(db) == DATABASE_INVALID);
 
-    // --- In-memory int32 index: declared by the Field's REFLECT_FIELD_INDEXED
-    //     flag, refreshed after an insert, same matches as the scan path.
-    CHECK(!Database_indexed(db, "player", "health"));  // not built yet
+    CHECK(!Database_indexed(db, "player", "health"));
     CHECK(Database_indexBuild(db, "player", "health") == DATABASE_OK);
     CHECK(Database_indexed(db, "player", "health"));
-    CHECK(!Database_indexed(db, "player", "id"));      // the flag is the declaration
+    CHECK(!Database_indexed(db, "player", "id"));
     CHECK(!Database_indexed(db, "player", "absent"));
     range = Database_queryInt32Range(db, "player", "health", 13, 17);
     CHECK(range != nullptr && DatabaseResult_count(range) == 2u);
@@ -778,7 +770,6 @@ static fn testStructuredEqualityQuery() {
     range = Database_queryInt32Range(db, "player", "health", INT32_MIN, INT32_MAX);
     CHECK(range != nullptr && DatabaseResult_count(range) == 6u);
     DatabaseResult_free(range);
-    // An insert marks the records stale; the next query refreshes them.
     Row extra = {15u, 14};
     CHECK(Database_insertOwned(db, "player", &extra, sizeof(Row)) == 6);
     range = Database_queryInt32Range(db, "player", "health", 13, 17);
@@ -791,20 +782,17 @@ static fn testStructuredEqualityQuery() {
         CHECK(!DatabaseResult_next(range, &row));
         DatabaseResult_free(range);
     }
-    // Rejections: null argument, unknown entity, unknown field, undeclared field.
     CHECK(Database_indexBuild(db, nullptr, "health") == DATABASE_INVALID);
     CHECK(Database_indexBuild(db, "ghost", "health") == DATABASE_ABSENT);
     CHECK(Database_indexBuild(db, "player", "nope") == DATABASE_ABSENT);
     CHECK(Database_indexBuild(db, "player", "id") == DATABASE_INVALID);
-    CHECK(Database_indexed(db, "player", "health"));   // a failed build changed nothing
+    CHECK(Database_indexed(db, "player", "health"));
 
-    // --- Named field resolution: a consumer with no C struct asks where the
-    //     field's Bytes live, and reads them through the answer.
     DatabaseFieldSpan span = Database_fieldSpan(db, "player", "health");
     CHECK(span.code == DATABASE_OK);
     CHECK(span.offset == (u32) offsetof(Row, health));
     CHECK(span.size == (u32) sizeof((*((Row*) nullptr)).health));
-    span = Database_fieldSpan(db, "PLAYER", "Health"); // folded: case is irrelevant
+    span = Database_fieldSpan(db, "PLAYER", "Health");
     CHECK(span.code == DATABASE_OK && span.offset == (u32) offsetof(Row, health));
     span = Database_fieldSpan(db, "player", "id");
     CHECK(span.code == DATABASE_OK);
@@ -813,17 +801,15 @@ static fn testStructuredEqualityQuery() {
     if (freshRow != nullptr && span.code == DATABASE_OK) {
         u32 id = 0u;
         memcpy(&id, (const u8*) freshRow + span.offset, sizeof(id));
-        CHECK(id == 5u); // the span is what makes a generic read possible
+        CHECK(id == 5u);
     }
-    // A declared span that leaves the row is refused, never handed to a reader.
     CHECK(Database_fieldSpan(db, "player", "bad").code == DATABASE_INVALID);
-    // Rejections, each explicit rather than a silent zero.
     CHECK(Database_fieldSpan(db, nullptr, "id").code == DATABASE_INVALID);
     CHECK(Database_fieldSpan(nullptr, "player", "id").code == DATABASE_INVALID);
     CHECK(Database_fieldSpan(db, "player", nullptr).code == DATABASE_INVALID);
     CHECK(Database_fieldSpan(db, "ghost", "id").code == DATABASE_ABSENT);
     CHECK(Database_fieldSpan(db, "player", "nope").code == DATABASE_ABSENT);
-    CHECK(Database_indexed(db, "player", "health"));   // resolution disturbed no index
+    CHECK(Database_indexed(db, "player", "health"));
 
     Database_free(db);
     Struct_free(schema);
@@ -832,10 +818,10 @@ static fn testStructuredEqualityQuery() {
 /** Verifies the declared int32 index survives a save/reopen through the Store. */
 static fn testPersistedIndex() {
     printf("[10] persisted int32 index roundtrip and schema drift\n");
-    const char *tmp = getenv("TMPDIR");
+    const utf8 *tmp = getenv("TMPDIR");
     if (tmp == nullptr)
         tmp = "/tmp/";
-    char path[256];
+    utf8 path[256];
     snprintf(path, sizeof(path), "%sdarkbase_index_XXXXXX", tmp);
     i32 fd = mkstemp(path);
     CHECK(fd >= 0);
@@ -844,7 +830,6 @@ static fn testPersistedIndex() {
     close(fd);
     remove(path);
 
-    // --- Write an index into the image.
     Store *store = Store(path, 1024u * 1024u, 512u, 2048u);
     Database *db = Database();
     Struct *schema = Struct("scores");
@@ -879,8 +864,7 @@ static fn testPersistedIndex() {
     Struct_free(schema);
     Store_free(store);
 
-    // --- Reopen: the image must carry the definition and its records.
-    store = Store(path); // reopen: geometry comes from the verified bootstrap
+    store = Store(path);
     db = Database();
     schema = Struct("scores");
     CHECK(store != nullptr && Store_isOpen(store));
@@ -906,7 +890,7 @@ static fn testPersistedIndex() {
         CHECK(Database_define(db, schema) == 0);
         CHECK(Database_loadStore(db, store) == DATABASE_OK);
         CHECK(Database_count(db, "scores") == 4u);
-        CHECK(Database_indexed(db, "scores", "health")); // the image declared it
+        CHECK(Database_indexed(db, "scores", "health"));
         DatabaseResult *range = Database_queryInt32Range(db, "scores", "health", 20, 40);
         CHECK(range != nullptr && DatabaseResult_count(range) == 3u);
         if (range != nullptr) {
@@ -922,9 +906,7 @@ static fn testPersistedIndex() {
     Struct_free(schema);
     Store_free(store);
 
-    // --- Schema drift at the same stride must reject: this is what proves the
-    //     loader reads and checks the persisted records rather than rebuilding.
-    store = Store(path); // reopen: geometry comes from the verified bootstrap
+    store = Store(path);
     db = Database();
     schema = Struct("scores");
     CHECK(store != nullptr && Store_isOpen(store));
@@ -937,7 +919,7 @@ static fn testPersistedIndex() {
         if (idField != nullptr && movedField != nullptr) {
             Field_setOffset(idField, (u32) offsetof(Row, id));
             Field_setSize(idField, (u32) sizeof((*((Row*) nullptr)).id));
-            Field_setOffset(movedField, (u32) offsetof(Row, id)); // moved
+            Field_setOffset(movedField, (u32) offsetof(Row, id));
             Field_setSize(movedField, (u32) sizeof(i32));
             Field_setFlags(movedField, REFLECT_FIELD_INDEXED);
             CHECK(Struct_add(schema, idField) == 0u);
@@ -949,7 +931,7 @@ static fn testPersistedIndex() {
             Field_free(movedField);
         CHECK(Database_define(db, schema) == 0);
         CHECK(Database_loadStore(db, store) == DATABASE_CORRUPT);
-        CHECK(Database_count(db, "scores") == 0u); // refusal published nothing
+        CHECK(Database_count(db, "scores") == 0u);
     }
     Database_free(db);
     Struct_free(schema);

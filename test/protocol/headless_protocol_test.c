@@ -1,5 +1,7 @@
-// HeadlessProtocol owner: byte-level wire oracle, adversarial framing and recovery.
-// No sockets or credentials; borrowed spans are live/disjoint, calls serialized.
+/**
+ * HeadlessProtocol owner: byte-level wire oracle, adversarial framing and recovery.
+ * No sockets or credentials; borrowed spans are live/disjoint, calls serialized.
+ */
 
 #include "vex.h"
 #include "protocol/headless_protocol.h"
@@ -11,7 +13,7 @@
 static u32 diagnostics;
 #define REFUSES(expression) do { ++diagnostics; assert(!(expression)); } while (false)
 
-// Known byte oracle, all stream splits, retained tail, request/response and busy.
+/** Known byte oracle, all stream splits, retained tail, request/response and busy. */
 static fn roundtrip() {
     const u8 payload[] = {0u, 255u, 's', 'e', 'c', 'r', 'e', 't'};
     const u8 golden[] = {20,0,0,0, 1,0, 1,0, 2,0, 0,0, 4,3,2,1,
@@ -52,7 +54,7 @@ static fn roundtrip() {
     HeadlessProtocol protocol = HeadlessProtocol(backing, sizeof backing);
     bytes used = 0u;
     assert(HeadlessProtocol_feed(&protocol, encoded, length * 2u, &used));
-    assert(used == length); // coalesced second frame stays with host until release
+    assert(used == length);
     assert(HeadlessProtocol_release(&protocol));
     assert(HeadlessProtocol_feed(&protocol, encoded + used, length, &used));
     assert(HeadlessProtocol_isReady(&protocol));
@@ -72,7 +74,7 @@ static fn roundtrip() {
     }
 }
 
-// Every truncation, each header constraint, explicit terminal latch and reset.
+/** Every truncation, each header constraint, explicit terminal latch and reset. */
 static fn hostile() {
     u8 encoded[64], backing[64];
     bytes length, used;
@@ -86,7 +88,7 @@ static fn hostile() {
         assert(HeadlessProtocol_getCode(&protocol) == HEADLESS_PROTOCOL_TRUNCATED);
         assert(HeadlessProtocol_isFailed(&protocol));
         assert(!HeadlessProtocol_feed(&protocol, encoded, length, &used));
-        assert(used == 0u); // latched rejection is already diagnosed
+        assert(used == 0u);
         HeadlessProtocol_reset(&protocol);
         assert(HeadlessProtocol_finish(&protocol));
         assert(HeadlessProtocol_feed(&protocol, encoded, length, &used));
@@ -99,7 +101,7 @@ static fn hostile() {
         memcpy(bad, encoded, length);
         bad[offsets[i]] = values[i];
         if (i == 2u)
-            memset(bad, 255, 4u); // UINT32_MAX prefix never wraps
+            memset(bad, 255, 4u);
         HeadlessProtocol protocol = HeadlessProtocol(backing, sizeof backing);
         REFUSES(HeadlessProtocol_feed(&protocol, bad, length, &used));
         assert(HeadlessProtocol_isFailed(&protocol));
@@ -108,7 +110,6 @@ static fn hostile() {
         if (i == 3u)
             assert(HeadlessProtocol_getCode(&protocol) == HEADLESS_PROTOCOL_VERSION);
     }
-    // Legal length exceeding this connection's backing: report once, count always.
     HeadlessProtocol protocol = HeadlessProtocol(backing, HEADLESS_WIRE_HEADER_BYTES);
     encoded[0] = 13u;
     REFUSES(HeadlessProtocol_feed(&protocol, encoded, 4u, &used));
@@ -122,13 +123,13 @@ static fn hostile() {
     assert(HeadlessProtocol_isReady(&protocol));
 }
 
-// Exact protocol maximum with full payload comparison and canary; output atomicity.
+/** Exact protocol maximum with full payload comparison and canary; output atomicity. */
 static fn boundaries() {
     static u8 payload[HEADLESS_WIRE_MAX_BYTES];
     static u8 encoded[HEADLESS_WIRE_MAX_BYTES + 1u];
     static u8 backing[HEADLESS_WIRE_MAX_BYTES + 1u];
     for (bytes i = 0u; i < sizeof payload; ++i)
-        payload[i] = (u8) (i * 37u); // deterministic full retained payload
+        payload[i] = (u8) (i * 37u);
     bytes length;
     bool truncated;
     bytes maximumPayload = HEADLESS_WIRE_MAX_BYTES - HEADLESS_WIRE_HEADER_BYTES;
@@ -159,7 +160,7 @@ static fn boundaries() {
     assert(truncated && length == 0u);
 }
 
-// Null/defaults, API misuse preservation, every public constructor/projection.
+/** Null/defaults, API misuse preservation, every public constructor/projection. */
 static fn defaults() {
     u8 backing[64];
     bytes used = SIZE_MAX, length;
@@ -209,7 +210,7 @@ static fn defaults() {
     REFUSES(HeadlessProtocol_encode(1u, 1u, 0u, 1u, nullptr, 0u, nullptr, 0u, &length, &truncated));
     REFUSES(HeadlessProtocol_encode(1u, 1u, 0u, 1u, nullptr, 0u, backing, sizeof backing, nullptr, &truncated));
     REFUSES(HeadlessProtocol_encode(1u, 1u, 0u, 1u, nullptr, 0u, backing, sizeof backing, &length, nullptr));
-    char text[256];
+    utf8 text[256];
     assert(HeadlessProtocol_toString(nullptr, text, sizeof text, &truncated));
     assert(!truncated && strcmp(text, "nullptr") == 0);
     assert(HeadlessProtocol_toStringStruct(nullptr, text, sizeof text, &truncated));
@@ -237,7 +238,7 @@ i32 main() {
     close(saved);
     rewind(capture);
     u32 count = 0u;
-    char line[512];
+    utf8 line[512];
     bool sawCapacity = false, sawVersion = false;
     while (fgets(line, sizeof line, capture) != nullptr) {
         assert(strstr(line, "[vex] ") == line);

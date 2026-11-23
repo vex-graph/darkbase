@@ -6,13 +6,13 @@ source tree (the Test Tree Mirror Law). A production unit at
 `darkbase-engine/test/<dir>/<unit>_test.c`.
 
 Current owner tests:
-- `database/database_test.c` — L2 `Database` entity registry and live-row binding.
-- `database/database_result_test.c` — the dest-last `DatabaseResult` cursor.
-- `page/page_test.c` — sealed frame layout, stored-byte validation and `Page_load`.
-- `wal/wal_test.c` — standalone and embedded WAL, commit marker, torn prefix,
+- `database/database_test.c`, L2 `Database` entity registry and live-row binding.
+- `database/database_result_test.c`, the dest-last `DatabaseResult` cursor.
+- `page/page_test.c`, sealed frame layout, stored-byte validation and `Page_load`.
+- `wal/wal_test.c`, standalone and embedded WAL, commit marker, torn prefix,
   bounds/exhaustion and rejection preservation.
-- `util/crc32_test.c` — standard CRC32 and incremental equivalence.
-- `store/store_test.c` — one-file real mapping/WAL/Page integration, live full
+- `util/crc32_test.c`, standard CRC32 and incremental equivalence.
+- `store/store_test.c`, one-file real mapping/WAL/Page integration, live full
   pages, release/reuse/reopen, both capacity bounds, corruption and child-exit
   recovery. The independent runner additionally injects five commit-stage IO failures.
 
