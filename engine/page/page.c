@@ -84,8 +84,8 @@
  *     bool Page_isDirty(const Page *self)
  *     fn Page_markClean(Page *self)
  *   Naming / projections:
- *     const utf8 *Page_codeName(PageCode code)
- *     const utf8 *Page_kindName(u32 kind)
+ *     string Page_codeName(PageCode code)
+ *     string Page_kindName(u32 kind)
  *     bool Page_toString(const Page *self, utf8 *dest, bytes capacity,
  *                        bool *outTruncated)
  *     bool Page_toStringStruct(const Page *self, utf8 *dest, bytes capacity,
@@ -416,7 +416,7 @@ fn Page_markClean(Page *self)
         Page_setDirty(self, false);
 }
 
-const utf8 *Page_codeName(PageCode code) {
+string Page_codeName(PageCode code) {
     switch (code) {
         case PAGE_OK:         return "ok";
         case PAGE_INVALID:    return "invalid";
@@ -428,7 +428,7 @@ const utf8 *Page_codeName(PageCode code) {
     }
 }
 
-const utf8 *Page_kindName(u32 kind) {
+string Page_kindName(u32 kind) {
     switch (kind) {
         case PAGE_KIND_FREE:     return "free";
         case PAGE_KIND_LEAF:     return "leaf";
@@ -440,7 +440,7 @@ const utf8 *Page_kindName(u32 kind) {
 }
 
 static bool writeNull(utf8 *dest, bytes capacity, bool *outTruncated) {
-    const utf8 *text = "nullptr";
+    string text = "nullptr";
     bytes length = strlen(text);
     bool cut = length + 1u > capacity;
     bytes copy = cut ? capacity - 1u : length;

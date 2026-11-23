@@ -13,7 +13,7 @@
 #include "nio/mem.h"
 #include "oop/darkbase_type.h"
 #include "reflection/struct.h"
-#include "re/primitive/char_sequence.h"
+#include "re/primitive/vex-string.h"
 #include "substrate/variable/variable_slot.h"
 #include "store/store.h"
 #include "nio/darkbase_memory.h"
@@ -30,7 +30,7 @@
  * either caller-owned borrowed rows or Database-owned copies. This is the
  * "everything is a pointer" thesis applied to storage: an entity IS a Struct,
  * its columns ARE Fields (behavior + physical layout), a row is addressed by a
- * stable pointer, and Database is the name -> entity -> rows index.
+ * stable pointer, and Database is the name  to  entity  to  rows index.
  *
  * The entity registry is a never-moved ChunkedList of private DbEntity slot
  * records (name, borrowed schema, per-entity row list). Each row list is a
@@ -150,10 +150,10 @@
  *   i32 Database_loadStore(Database *self, Store *store)
  *   DatabaseCatalogEntry Database_storeCatalogEntry(Store *store, u32 index)
  * Public Structured Query:
- *   DatabaseResult *Database_queryEqual(Database *self, const utf8 *entity,
- *       const utf8 *field, const_any value, bytes valueLength)
- *   DatabaseResult *Database_queryInt32Range(Database *self, const utf8 *entity,
- *       const utf8 *field, i32 minimum, i32 maximum)
+ *   DatabaseResult *Database_queryEqual(Database *self, string entity,
+ *       string field, const_any value, bytes valueLength)
+ *   DatabaseResult *Database_queryInt32Range(Database *self, string entity,
+ *       string field, i32 minimum, i32 maximum)
  * Store catalog discovery returns a copied DatabaseCatalogEntry value; its
  * name/stride/count remain valid after Store close. A requested out-of-range
  * position returns DATABASE_ABSENT and a cold diagnostic.
@@ -215,7 +215,7 @@ static inline fn Database_setLastCode(Database *self, i32 code)
     (*self).lastCode = code;
 }
 ;;GETTER
-static inline const utf8 *Database_lastErrorText(const Database *self)
+static inline string Database_lastErrorText(const Database *self)
 {
     return (*self).lastError;
 }
@@ -225,7 +225,7 @@ static inline utf8 *Database_lastErrorMut(Database *self)
     return (*self).lastError;
 }
 ;;GETTER
-static inline const utf8 *DbEntity_name(const DbEntity *e)
+static inline string DbEntity_name(const DbEntity *e)
 {
     return (*e).name;
 }
@@ -265,7 +265,7 @@ static inline fn DbEntity_setRows(DbEntity *e, ChunkedList *rows)
     (*e).rows = rows;
 }
 ;;GETTER
-static inline const utf8 *DbEntity_indexField(const DbEntity *e)
+static inline string DbEntity_indexField(const DbEntity *e)
 {
     return (*e).indexField;
 }
@@ -341,7 +341,7 @@ static inline fn DbIndexRecord_setRow(DbIndexRecord *r, any row)
  * Stores the latest error code and bounded message when the Database exists.
  * A null message clears the stored text; a null Database is ignored.
  */
-static fn recordError(Database *self, i32 code, const utf8 *message) {
+static fn recordError(Database *self, i32 code, string message) {
     if (self == nullptr)
         return;
     Database_setLastCode(self, code);
@@ -361,14 +361,14 @@ static fn recordError(Database *self, i32 code, const utf8 *message) {
  * Finds an entity by its already-folded name, returning its registry index or
  * -1 when the inputs, registry, or matching entity are absent.
  */
-static i32 findEntity(const Database *self, const utf8 *folded) {
+static i32 findEntity(const Database *self, string folded) {
     ChunkedList *entities = self == nullptr ? nullptr : Database_entities(self);
     if (self == nullptr || folded == nullptr || entities == nullptr)
         return -1;
     u32 n = ChunkedList_size(entities);
     for (u32 i = 0u; i < n; i++) {
         DbEntity *entity = (DbEntity*) ChunkedList_slot(entities, i);
-        if (entity != nullptr && CharSequence_equals(CharSequence_cstr(DbEntity_name(entity)), CharSequence_cstr(folded)))
+        if (entity != nullptr && string_equals(DbEntity_name(entity), folded))
             return (i32) i;
     }
     return -1;
@@ -472,7 +472,7 @@ static bool indexRebuild(Database *self, DbEntity *entity) {
 }
 
 /** Resolve one requested field name to its span within the entity's schema. */
-static DbFieldSpan resolveField(const DbEntity *entity, const utf8 *fieldName) {
+static DbFieldSpan resolveField(const DbEntity *entity, string fieldName) {
     DbFieldSpan span = { DATABASE_ABSENT, nullptr, 0u, 0u };
     Struct *schema = entity == nullptr ? nullptr : DbEntity_schema(entity);
     if (entity == nullptr || schema == nullptr)
@@ -486,11 +486,11 @@ static DbFieldSpan resolveField(const DbEntity *entity, const utf8 *fieldName) {
     u32 fieldCount = Struct_count(schema);
     for (u32 i = 0u; i < fieldCount; i++) {
         Field *candidate = Struct_get(schema, i);
-        const utf8 *candidateName = Field_getName(candidate);
+        string candidateName = Field_getName(candidate);
         utf8 candidateFolded[REFLECT_FIELD_NAME_BYTES];
         if (candidateName != nullptr &&
             VariableSlot_foldName(candidateName, candidateFolded) &&
-            CharSequence_equals(CharSequence_cstr(candidateFolded), CharSequence_cstr(folded))) {
+            string_equals(candidateFolded, folded)) {
             if (matched != nullptr) {
                 span.code = DATABASE_INVALID;
                 return span;
@@ -614,7 +614,7 @@ i32 Database_define(Database *self, Struct *schema) {
         THROW("Database_define: null database or schema");
         return -1;
     }
-    const utf8 *name = Struct_getName(schema);
+    string name = Struct_getName(schema);
     if (name == nullptr) {
         recordError(self, DATABASE_INVALID, "define: schema has no valid name");
         THROW("Database_define: schema has no valid name");
@@ -660,7 +660,7 @@ i32 Database_define(Database *self, Struct *schema) {
  * Resolves a valid entity name to its registry index, or returns -1 when the
  * Database/name is null, malformed, or not registered.
  */
-i32 Database_entityIndex(const Database *self, const utf8 *entity) {
+i32 Database_entityIndex(const Database *self, string entity) {
     if (self == nullptr || entity == nullptr)
         return -1;
     utf8 folded[DB_ENTITY_NAME_BYTES];
@@ -684,7 +684,7 @@ u32 Database_entityCount(const Database *self) {
  * Returns the borrowed schema for a registered entity, or nullptr if lookup
  * fails.
  */
-Struct *Database_schema(const Database *self, const utf8 *entity) {
+Struct *Database_schema(const Database *self, string entity) {
     i32 index = Database_entityIndex(self, entity);
     if (index < 0)
         return nullptr;
@@ -696,7 +696,7 @@ Struct *Database_schema(const Database *self, const utf8 *entity) {
  * Binds a caller-owned row pointer to a live entity and returns its row index.
  * Rejections leave the row unbound and return -1 with a recorded error.
  */
-i32 Database_insert(Database *self, const utf8 *entity, any row) {
+i32 Database_insert(Database *self, string entity, any row) {
     if (self == nullptr || entity == nullptr || row == nullptr) {
         recordError(self, DATABASE_INVALID, "insert: null argument");
         THROW("Database_insert: null argument");
@@ -743,7 +743,7 @@ i32 Database_insert(Database *self, const utf8 *entity, any row) {
  * or already own all its rows; rejection frees any staged copy and preserves
  * both row count and ownership mode.
  */
-i32 Database_insertOwned(Database *self, const utf8 *entity, const_any rowBytes,
+i32 Database_insertOwned(Database *self, string entity, const_any rowBytes,
                              bytes rowBytesLength) {
     if (self == nullptr || entity == nullptr || rowBytes == nullptr) {
         recordError(self, DATABASE_INVALID, "insertOwned: null argument");
@@ -807,7 +807,7 @@ i32 Database_insertOwned(Database *self, const utf8 *entity, const_any rowBytes,
  * Returns the borrowed row pointer at an entity's index, or nullptr when the
  * entity, row list, index, or stored pointer is unavailable.
  */
-any Database_row(const Database *self, const utf8 *entity, u32 index) {
+any Database_row(const Database *self, string entity, u32 index) {
     i32 e = Database_entityIndex(self, entity);
     if (e < 0)
         return nullptr;
@@ -822,7 +822,7 @@ any Database_row(const Database *self, const utf8 *entity, u32 index) {
 /**
  * Returns the number of rows bound to an entity, or zero when lookup fails.
  */
-u32 Database_count(const Database *self, const utf8 *entity) {
+u32 Database_count(const Database *self, string entity) {
     i32 e = Database_entityIndex(self, entity);
     if (e < 0)
         return 0u;
@@ -835,7 +835,7 @@ u32 Database_count(const Database *self, const utf8 *entity) {
  * Creates a cursor over an entity's current row list; absent/unavailable
  * entities return nullptr and update the Database error state.
  */
-DatabaseResult *Database_select(Database *self, const utf8 *entity) {
+DatabaseResult *Database_select(Database *self, string entity) {
     i32 e = Database_entityIndex(self, entity);
     if (e < 0) {
         recordError(self, DATABASE_ABSENT, "select: no such entity");
@@ -854,8 +854,8 @@ DatabaseResult *Database_select(Database *self, const utf8 *entity) {
 }
 
 /** Returns a cold exact-byte equality cursor over one admitted reflected Field. */
-DatabaseResult *Database_queryEqual(Database *self, const utf8 *entityName,
-                                    const utf8 *fieldName, const_any value,
+DatabaseResult *Database_queryEqual(Database *self, string entityName,
+                                    string fieldName, const_any value,
                                     bytes valueLength) {
     if (self == nullptr || entityName == nullptr || fieldName == nullptr ||
         value == nullptr || valueLength == 0u) {
@@ -888,11 +888,11 @@ DatabaseResult *Database_queryEqual(Database *self, const utf8 *entityName,
     u32 fieldCount = Struct_count(schema);
     for (u32 i = 0u; i < fieldCount; i++) {
         Field *candidate = Struct_get(schema, i);
-        const utf8 *candidateName = Field_getName(candidate);
+        string candidateName = Field_getName(candidate);
         utf8 candidateFolded[REFLECT_FIELD_NAME_BYTES];
         if (candidateName != nullptr &&
             VariableSlot_foldName(candidateName, candidateFolded) &&
-            CharSequence_equals(CharSequence_cstr(candidateFolded), CharSequence_cstr(foldedField))) {
+            string_equals(candidateFolded, foldedField)) {
             if (matched != nullptr) {
                 recordError(self, DATABASE_INVALID, "queryEqual: ambiguous field name");
                 THROW("Database_queryEqual: ambiguous field name");
@@ -955,8 +955,8 @@ DatabaseResult *Database_queryEqual(Database *self, const utf8 *entityName,
 }
 
 /** Inclusive signed range scan for one exactly typed reflected int32 field. */
-DatabaseResult *Database_queryInt32Range(Database *self, const utf8 *entityName,
-                                         const utf8 *fieldName, i32 minimum,
+DatabaseResult *Database_queryInt32Range(Database *self, string entityName,
+                                         string fieldName, i32 minimum,
                                          i32 maximum) {
     if (self == nullptr || entityName == nullptr || fieldName == nullptr ||
         minimum > maximum) {
@@ -989,11 +989,11 @@ DatabaseResult *Database_queryInt32Range(Database *self, const utf8 *entityName,
     u32 fieldCount = Struct_count(schema);
     for (u32 i = 0u; i < fieldCount; i++) {
         Field *candidate = Struct_get(schema, i);
-        const utf8 *candidateName = Field_getName(candidate);
+        string candidateName = Field_getName(candidate);
         utf8 candidateFolded[REFLECT_FIELD_NAME_BYTES];
         if (candidateName != nullptr &&
             VariableSlot_foldName(candidateName, candidateFolded) &&
-            CharSequence_equals(CharSequence_cstr(candidateFolded), CharSequence_cstr(foldedField))) {
+            string_equals(candidateFolded, foldedField)) {
             if (matched != nullptr) {
                 recordError(self, DATABASE_INVALID, "queryInt32Range: ambiguous field name");
                 THROW("Database_queryInt32Range: ambiguous field name");
@@ -1025,7 +1025,7 @@ DatabaseResult *Database_queryInt32Range(Database *self, const utf8 *entityName,
     }
     bool indexed = DbEntity_indexRecords(entity) != nullptr &&
         DbEntity_indexField(entity)[0] != '\0' &&
-        CharSequence_equals(CharSequence_cstr(DbEntity_indexField(entity)), CharSequence_cstr(foldedField));
+        string_equals(DbEntity_indexField(entity), foldedField);
     if (indexed && DbEntity_indexDirty(entity) != 0u)
         indexed = indexRebuild(self, entity);
     if (indexed) {
@@ -1098,7 +1098,7 @@ DatabaseResult *Database_queryInt32Range(Database *self, const utf8 *entityName,
  * single declaration point. Cold path. The definition outlives a row-list
  * replacement (a load drops the records and the next query rebuilds them).
  */
-i32 Database_indexBuild(Database *self, const utf8 *entityName, const utf8 *fieldName) {
+i32 Database_indexBuild(Database *self, string entityName, string fieldName) {
     if (self == nullptr || entityName == nullptr || fieldName == nullptr) {
         recordError(self, DATABASE_INVALID, "indexBuild: null or empty argument");
         THROW("Database_indexBuild: null or empty argument");
@@ -1156,7 +1156,7 @@ i32 Database_indexBuild(Database *self, const utf8 *entityName, const utf8 *fiel
  * declaration, not the records: after a load the records are dropped and the
  * next query rebuilds them, so the answer stays true meanwhile.
  */
-bool Database_indexed(const Database *self, const utf8 *entityName, const utf8 *fieldName) {
+bool Database_indexed(const Database *self, string entityName, string fieldName) {
     if (self == nullptr || entityName == nullptr || fieldName == nullptr)
         return false;
     utf8 foldedEntity[DB_ENTITY_NAME_BYTES];
@@ -1170,7 +1170,7 @@ bool Database_indexed(const Database *self, const utf8 *entityName, const utf8 *
     DbEntity *entity = (DbEntity*) ChunkedList_slot(Database_entities(self), (u32) entityIndex);
     if (entity == nullptr || DbEntity_indexField(entity)[0] == '\0')
         return false;
-    return CharSequence_equals(CharSequence_cstr(DbEntity_indexField(entity)), CharSequence_cstr(foldedField));
+    return string_equals(DbEntity_indexField(entity), foldedField);
 }
 
 /** NAMED FIELD RESOLUTION */
@@ -1180,8 +1180,8 @@ bool Database_indexed(const Database *self, const utf8 *entityName, const utf8 *
  * struct to take the offset from. Read-only: it allocates nothing, disturbs no
  * index, and preserves prior state on every rejection.
  */
-DatabaseFieldSpan Database_fieldSpan(const Database *self, const utf8 *entityName,
-                                     const utf8 *fieldName) {
+DatabaseFieldSpan Database_fieldSpan(const Database *self, string entityName,
+                                     string fieldName) {
     DatabaseFieldSpan span = { DATABASE_INVALID, 0u, 0u };
     if (self == nullptr || entityName == nullptr || fieldName == nullptr) {
         THROW("Database_fieldSpan: null argument");
@@ -1236,7 +1236,7 @@ i32 Database_errorCode(const Database *self) {
 i32 Database_lastError(const Database *self, utf8 *out, bytes outCap) {
     if (self == nullptr || out == nullptr || outCap == 0u)
         return -1;
-    const utf8 *err = Database_lastErrorText(self);
+    string err = Database_lastErrorText(self);
     bytes len = strlen(err);
     bytes copy = len < outCap - 1u ? len : outCap - 1u;
     memcpy(out, err, copy);
@@ -1248,7 +1248,7 @@ i32 Database_lastError(const Database *self, utf8 *out, bytes outCap) {
  * Maps a Database error code to static human-readable text, including unknown
  * values.
  */
-const utf8 *Database_errorText(i32 code) {
+string Database_errorText(i32 code) {
     switch (code) {
         case DATABASE_OK:        return "ok";
         case DATABASE_INVALID:   return "invalid argument";
@@ -1263,14 +1263,15 @@ const utf8 *Database_errorText(i32 code) {
 
 /** PERSISTENCE (M2, .vexdb) */
 
+;;INTENTION("NO ENDIANNESS NEEDED: values are raw u8[] in native little-endian host memory order, never text-encoded")
 /**
- * INTENTIONAL(vex): NO ENDIANNESS NEEDED!! We just write the value bytes in
- * memory order (left to right) and call it a day, not laziness, but because a
- * byte[] right-to-the-point is more native than byte-swap machinery and needs
- * no complication. Every supported host is little-endian (Apple Silicon arm64
+ * NO ENDIANNESS NEEDED!! We just write the value bytes in memory order (left
+ * to right) and call it a day, not laziness, but because a byte[]
+ * right-to-the-point is more native than byte-swap machinery and needs no
+ * complication. Every supported host is little-endian (Apple Silicon arm64
  * floor; Windows x86_64), so there is no cross-endian peer to serve. Values are
- * raw u8[] spans, nothing is encoded as text. toString() is a cold
- * converter for humans, never a storage format.
+ * raw u8[] spans, nothing is encoded as text. toString() is a cold converter
+ * for humans, never a storage format.
  */
 
 #define DATABASE_STORE_ROOT_ID 1u
@@ -1488,7 +1489,7 @@ static i32 loadCommit(Database *self, const u8 *payload, bytes length,
  * Writes a CRC-protected native-endian snapshot to a temporary sibling, syncs
  * it, then renames it over the destination; failures preserve the old file.
  */
-i32 Database_save(Database *self, const utf8 *path) {
+i32 Database_save(Database *self, string path) {
     if (self == nullptr || path == nullptr) {
         recordError(self, DATABASE_INVALID, "save: null database or path");
         THROW("Database_save: null database or path");
@@ -1578,7 +1579,7 @@ i32 Database_save(Database *self, const utf8 *path) {
  * Validates a snapshot header, payload checksum, registered schemas, and empty
  * target entities before loading rows as Database-owned arena allocations.
  */
-i32 Database_load(Database *self, const utf8 *path) {
+i32 Database_load(Database *self, string path) {
     if (self == nullptr || path == nullptr) {
         recordError(self, DATABASE_INVALID, "load: null database or path");
         THROW("Database_load: null database or path");
@@ -1755,7 +1756,7 @@ static u8 *databaseStoreCatalogBytes(Database *self, bytes *outLength) {
 }
 
 ;;GETTER
-static inline const utf8 *DatabaseStoreRoot_magic(const DatabaseStoreRoot *r)
+static inline string DatabaseStoreRoot_magic(const DatabaseStoreRoot *r)
 {
     return (*r).magic;
 }
@@ -1883,7 +1884,7 @@ static i32 databaseStoreLoadCommit(Database *self, const u8 *data,
         for (u32 prior = 0u; prior < e; prior++) {
             DatabaseStoreEntity previous;
             memcpy(&previous, data + priorOffset, sizeof(previous));
-            if (CharSequence_equals(CharSequence_cstr(previous.name), CharSequence_cstr(record.name)))
+            if (string_equals(previous.name, record.name))
                 return DATABASE_DUPLICATE;
             priorOffset += sizeof(previous) +
                 (bytes) previous.rowCount * previous.stride +

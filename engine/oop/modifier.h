@@ -24,13 +24,13 @@
  * , is an extensible ATTRIBUTE, not a modifier. That split is what keeps the
  * keyword set stable.
  *
- * INTENTIONAL(vex): the modifier keyword set is closed on purpose. A field's
- * access, protection, nullability and storage are declared once and stay; the
- * ecosystem's flexibility comes from schema VERSIONING and field VISIBILITY,
- * never from editing a live field's declaration. You do not change a data
- * type just because it is that, you version it or you hide it. Adding a
- * keyword later is a breaking change the same way a new Java keyword is, so
- * the set is shut now and everything else is an extensible ATTRIBUTE.
+ * The modifier keyword set is closed on purpose. A field's access, protection,
+ * nullability and storage are declared once and stay; the ecosystem's
+ * flexibility comes from schema VERSIONING and field VISIBILITY, never from
+ * editing a live field's declaration. You do not change a data type just
+ * because it is that, you version it or you hide it. Adding a keyword later is
+ * a breaking change the same way a new Java keyword is, so the set is shut now
+ * and everything else is an extensible ATTRIBUTE.
  *
  * WHAT EACH AXIS MEANS
  * access       private = the processor/private API only (default);
@@ -75,22 +75,36 @@
  * field declaration carries the modifier, and the schema layer decides when a
  * declaration may change.
  */
-
+;;INTENTION("Modifier keyword set is closed on purpose; flexibility lives in schema versioning, field visibility, and extensible attributes")
+/**
+ * MODIFIER_ACCESS_PRIVATE - processor/private API only (default)
+ * MODIFIER_ACCESS_PUBLIC  - reachable through the public API
+ */
 typedef enum ModifierAccess {
-    MODIFIER_ACCESS_PRIVATE = 0, /** processor/private API only (default) */
-    MODIFIER_ACCESS_PUBLIC = 1, /** reachable through the public API */
+    MODIFIER_ACCESS_PRIVATE = 0,
+    MODIFIER_ACCESS_PUBLIC = 1,
 } ModifierAccess;
 
+/**
+ * MODIFIER_PROTECTION_PLAIN         - stored as-is (default)
+ * MODIFIER_PROTECTION_HASHED        - one-way verifier
+ * MODIFIER_PROTECTION_CLIENT_SEALED - reversible; the client holds the key
+ * MODIFIER_PROTECTION_SERVER_SEALED - reversible; the processor holds the key
+ * MODIFIER_PROTECTION_TRUNCATED     - irreversible loss (explicit opt-in)
+ */
 typedef enum ModifierProtection {
-    MODIFIER_PROTECTION_PLAIN = 0, /** stored as-is (default) */
-    MODIFIER_PROTECTION_HASHED = 1, /** one-way verifier */
-    MODIFIER_PROTECTION_CLIENT_SEALED = 2, /** reversible; the client holds the key */
-    MODIFIER_PROTECTION_SERVER_SEALED = 3, /** reversible; the processor holds the key */
-    MODIFIER_PROTECTION_TRUNCATED = 4, /** irreversible loss (explicit opt-in) */
+    MODIFIER_PROTECTION_PLAIN = 0,
+    MODIFIER_PROTECTION_HASHED = 1,
+    MODIFIER_PROTECTION_CLIENT_SEALED = 2,
+    MODIFIER_PROTECTION_SERVER_SEALED = 3,
+    MODIFIER_PROTECTION_TRUNCATED = 4,
 } ModifierProtection;
 
+/**
+ * MODIFIER_NULLABLE - default
+ */
 typedef enum ModifierNullability {
-    MODIFIER_NULLABLE = 0, /** default */
+    MODIFIER_NULLABLE = 0,
     MODIFIER_NONNULL = 1,
 } ModifierNullability;
 
@@ -98,38 +112,59 @@ typedef enum ModifierNullability {
  * Cold rejection codes. MODIFIER_OK is success; a Modifier carries its last
  * code so a value-returning constructor or parse can report without a
  * destination parameter.
+ *
+ * MODIFIER_INVALID         - null self or an illegal argument
+ * MODIFIER_BAD_ACCESS      - access outside the enum
+ * MODIFIER_BAD_PROTECTION  - protection outside the enum
+ * MODIFIER_BAD_NULLABILITY - nullability outside the enum
+ * MODIFIER_BAD_TOKEN       - unknown, empty or overlong modifier token
+ * MODIFIER_DUPLICATE       - the same axis was named twice
  */
 typedef enum ModifierCode {
     MODIFIER_OK = 0,
-    MODIFIER_INVALID = 1, /** null self or an illegal argument */
-    MODIFIER_BAD_ACCESS = 2, /** access outside the enum */
-    MODIFIER_BAD_PROTECTION = 3, /** protection outside the enum */
-    MODIFIER_BAD_NULLABILITY = 4, /** nullability outside the enum */
-    MODIFIER_BAD_TOKEN = 5, /** unknown, empty or overlong modifier token */
-    MODIFIER_DUPLICATE = 6, /** the same axis was named twice */
+    MODIFIER_INVALID = 1,
+    MODIFIER_BAD_ACCESS = 2,
+    MODIFIER_BAD_PROTECTION = 3,
+    MODIFIER_BAD_NULLABILITY = 4,
+    MODIFIER_BAD_TOKEN = 5,
+    MODIFIER_DUPLICATE = 6,
 } ModifierCode;
 
 /**
  * Policy advisories, NOT rejections. A public content hash is legitimate, so
  * these are flags the schema layer may surface; they never make a Modifier
  * structurally invalid.
+ *
+ * MODIFIER_WARNING_PUBLIC_VERIFIER     - public + hashed
+ * MODIFIER_WARNING_TRANSIENT_PROTECTED - transient + protected
+ * MODIFIER_WARNING_SHARED_TRANSIENT    - static + transient
+ * MODIFIER_WARNING_LOSSY               - truncated: irreversible
  */
 typedef enum ModifierWarning {
     MODIFIER_WARNING_NONE = 0u,
-    MODIFIER_WARNING_PUBLIC_VERIFIER = 1u << 0, /** public + hashed */
-    MODIFIER_WARNING_TRANSIENT_PROTECTED = 1u << 1, /** transient + protected */
-    MODIFIER_WARNING_SHARED_TRANSIENT = 1u << 2, /** static + transient */
-    MODIFIER_WARNING_LOSSY = 1u << 3, /** truncated: irreversible */
+    MODIFIER_WARNING_PUBLIC_VERIFIER = 1u << 0,
+    MODIFIER_WARNING_TRANSIENT_PROTECTED = 1u << 1,
+    MODIFIER_WARNING_SHARED_TRANSIENT = 1u << 2,
+    MODIFIER_WARNING_LOSSY = 1u << 3,
 } ModifierWarning;
 
-/** STRUCT FIELDS (mirrored by the ;;OVERVIEW in oop/modifier.c, in this order) */
+/**
+ * STRUCT FIELDS (mirrored by the ;;OVERVIEW in oop/modifier.c, in this order)
+ *
+ * u32 access      - ModifierAccess
+ * u32 protection  - ModifierProtection
+ * u32 nullability - ModifierNullability
+ * bool transient  - not persisted: in-memory only
+ * bool shared     - "static": shared across rows
+ * i32 lastCode    - last ModifierCode
+ */
 typedef struct Modifier {
-    u32 access; /** ModifierAccess */
-    u32 protection; /** ModifierProtection */
-    u32 nullability; /** ModifierNullability */
-    bool transient; /** not persisted: in-memory only */
-    bool shared; /** "static": shared across rows */
-    i32 lastCode; /** last ModifierCode */
+    u32 access;
+    u32 protection;
+    u32 nullability;
+    bool transient;
+    bool shared;
+    i32 lastCode;
 } Modifier;
 
 #define MODIFIER_TOKEN_MAX   32u /** one token, including its NUL */
@@ -290,11 +325,11 @@ bool Modifier_isLossy(Modifier self); /** truncated */
 bool Modifier_equals(Modifier a, Modifier b); /** axes and flags; not lastCode */
 
 /** --- Naming ---------------------------------------------------------------- */
-const utf8 *Modifier_accessName(ModifierAccess access);
-const utf8 *Modifier_protectionName(ModifierProtection protection);
-const utf8 *Modifier_nullabilityName(ModifierNullability nullability);
-const utf8 *Modifier_codeName(ModifierCode code);
-const utf8 *Modifier_warningName(u32 warning);
+string Modifier_accessName(ModifierAccess access);
+string Modifier_protectionName(ModifierProtection protection);
+string Modifier_nullabilityName(ModifierNullability nullability);
+string Modifier_codeName(ModifierCode code);
+string Modifier_warningName(u32 warning);
 
 /**
  * --- Terminal path ---------------------------------------------------------
@@ -303,12 +338,12 @@ const utf8 *Modifier_warningName(u32 warning);
  * twice rejects as MODIFIER_DUPLICATE; an unknown/overlong token rejects as
  * MODIFIER_BAD_TOKEN with one THROW. An empty list is the default Modifier.
  */
-Modifier Modifier_parse(const utf8 *text);
+Modifier Modifier_parse(string text);
 /**
  * Apply ONE token to a base value; last-wins for that axis. Unknown token
  * rejects as MODIFIER_BAD_TOKEN with one THROW.
  */
-Modifier Modifier_applyToken(Modifier self, const utf8 *token);
+Modifier Modifier_applyToken(Modifier self, string token);
 
 /**
  * --- Projections (the toString Law; dest-last per this repo's convention) ---

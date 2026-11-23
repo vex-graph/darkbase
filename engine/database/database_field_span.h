@@ -18,11 +18,15 @@
  * DATABASE_ABSENT for an unknown entity or field, and DATABASE_INVALID for a
  * null or malformed argument, an ambiguous folded name, or a span that would
  * leave the row, a span the caller could not safely read is never returned.
+ *
+ * i32 code   - DATABASE_OK, or the rejection code
+ * u32 offset - in-row byte offset of the field's span
+ * u32 size   - Bytes in the field's span
  */
 typedef struct DatabaseFieldSpan {
-    i32 code; /** DATABASE_OK, or the rejection code */
-    u32 offset; /** in-row byte offset of the field's span */
-    u32 size; /** Bytes in the field's span */
+    i32 code;
+    u32 offset;
+    u32 size;
 } DatabaseFieldSpan;
 
 #endif

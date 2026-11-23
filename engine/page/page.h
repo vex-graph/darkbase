@@ -38,32 +38,56 @@
 #define PAGE_HEADER_BYTES     32u
 #define PAGE_SEAL_OFFSET      28u
 
+/**
+ * PAGE_INVALID    - null storage, an illegal size, or a bad argument
+ * PAGE_BAD_SEAL   - the checksum does not match: the page is damaged
+ * PAGE_FULL       - the payload would not fit; nothing was appended
+ * PAGE_NOT_SEALED - the operation needs a sealed page
+ * PAGE_SEALED     - the page is sealed and therefore immutable
+ */
 typedef enum PageCode {
     PAGE_OK = 0,
-    PAGE_INVALID = 1, /** null storage, an illegal size, or a bad argument */
-    PAGE_BAD_SEAL = 2, /** the checksum does not match: the page is damaged */
-    PAGE_FULL = 3, /** the payload would not fit; nothing was appended */
-    PAGE_NOT_SEALED = 4, /** the operation needs a sealed page */
-    PAGE_SEALED = 5, /** the page is sealed and therefore immutable */
+    PAGE_INVALID = 1,
+    PAGE_BAD_SEAL = 2,
+    PAGE_FULL = 3,
+    PAGE_NOT_SEALED = 4,
+    PAGE_SEALED = 5,
 } PageCode;
 
+/**
+ * PAGE_KIND_FREE     - released: reusable by the free list
+ * PAGE_KIND_LEAF     - holds records
+ * PAGE_KIND_BRANCH   - holds child page ids
+ * PAGE_KIND_OVERFLOW - the tail of a value too i64 for its row
+ * PAGE_KIND_CATALOG  - schema and identity rows
+ */
 typedef enum PageKind {
-    PAGE_KIND_FREE = 0, /** released: reusable by the free list */
-    PAGE_KIND_LEAF = 1, /** holds records */
-    PAGE_KIND_BRANCH = 2, /** holds child page ids */
-    PAGE_KIND_OVERFLOW = 3, /** the tail of a value too i64 for its row */
-    PAGE_KIND_CATALOG = 4, /** schema and identity rows */
+    PAGE_KIND_FREE = 0,
+    PAGE_KIND_LEAF = 1,
+    PAGE_KIND_BRANCH = 2,
+    PAGE_KIND_OVERFLOW = 3,
+    PAGE_KIND_CATALOG = 4,
 } PageKind;
 
+/**
+ * u8 *bytes    - borrowed page storage (PAGE size bytes)
+ * u32 size     - the store's page size, power of two
+ * u32 id       - this page's number within the file (sealed in)
+ * u32 kind     - PageKind
+ * u32 used     - in-use payload bytes (mirrors the header field)
+ * i32 lastCode - last PageCode refusal
+ * bool sealed  - the seal field is valid
+ * bool dirty   - the caller has changed bytes since the last seal
+ */
 typedef struct Page {
-    u8 *bytes; /** borrowed page storage (PAGE size bytes) */
-    u32 size; /** the store's page size, power of two */
-    u32 id; /** this page's number within the file (sealed in) */
-    u32 kind; /** PageKind */
-    u32 used; /** in-use payload bytes (mirrors the header field) */
-    i32 lastCode; /** last PageCode refusal */
-    bool sealed; /** the seal field is valid */
-    bool dirty; /** the caller has changed bytes since the last seal */
+    u8 *bytes;
+    u32 size;
+    u32 id;
+    u32 kind;
+    u32 used;
+    i32 lastCode;
+    bool sealed;
+    bool dirty;
 } Page;
 
 /** Is this a legal page size for a store to choose? */
@@ -120,8 +144,8 @@ bool        Page_isSealed(const Page *self);
 bool        Page_isDirty(const Page *self);
 fn        Page_markClean(Page *self); /** the caller flushed it */
 
-const utf8 *Page_codeName(PageCode code);
-const utf8 *Page_kindName(u32 kind);
+string Page_codeName(PageCode code);
+string Page_kindName(u32 kind);
 
 bool Page_toString(const Page *self, utf8 *dest, bytes capacity, bool *outTruncated);
 bool Page_toStringStruct(const Page *self, utf8 *dest, bytes capacity, bool *outTruncated);

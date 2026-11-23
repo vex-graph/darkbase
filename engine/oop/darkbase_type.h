@@ -27,11 +27,11 @@
  *
  * The entity model IS the reflection vocabulary, darkbase-engine defines no parallel
  * schema types:
- * struct   -> Struct          (reflection: a table = an ordered Field list)
- * class    -> Class           (reflection: a Struct + constructor + Methods)
- * field    -> Field           (reflection: name + read/set + physical layout)
- * function -> Method          (reflection: a named callable binding)
- * trigger  -> DbTrigger       (darkbase-engine: a reactive program = Method + event)
+ * struct    to  Struct          (reflection: a table = an ordered Field list)
+ * class     to  Class           (reflection: a Struct + constructor + Methods)
+ * field     to  Field           (reflection: name + read/set + physical layout)
+ * function  to  Method          (reflection: a named callable binding)
+ * trigger   to  DbTrigger       (darkbase-engine: a reactive program = Method + event)
  *
  * M0 registers the darkbase-engine-owned ids. Behavior lands per class in later
  * milestones; an id present here is a registry entry, not an implementation claim.

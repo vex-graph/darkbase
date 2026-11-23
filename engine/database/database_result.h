@@ -14,11 +14,17 @@
  * Database and do not mutate a borrowed source concurrently.
  */
 
+/**
+ * ChunkedList *rows - borrowed rows, or an owned list of borrowed row pointers
+ * u32 count         - published rows snapshotted at construction
+ * u32 cursor        - index of the next row to hand out
+ * u32 ownsRows      - owns list storage only; never owns the row pointers
+ */
 typedef struct DatabaseResult {
-    ChunkedList *rows; /** borrowed rows, or an owned list of borrowed row pointers */
-    u32 count; /** published rows snapshotted at construction */
-    u32 cursor; /** index of the next row to hand out */
-    u32 ownsRows; /** owns list storage only; never owns the row pointers */
+    ChunkedList *rows;
+    u32 count;
+    u32 cursor;
+    u32 ownsRows;
 } DatabaseResult;
 
 /**

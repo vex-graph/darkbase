@@ -40,14 +40,22 @@
 #define WAL_COMMIT_BYTES 8u
 #define WAL_COMMIT_MAGIC UINT64_C(0x54494d4d4f435857)
 
+/**
+ * WAL_INVALID   - null/illegal argument, unknown op, or an over-large payload
+ * WAL_IO        - the OS refused a read, write, sync, seek or truncate
+ * WAL_CORRUPT   - a complete record failed its checksum (never skipped)
+ * WAL_TRUNCATED - an incomplete trailing record was dropped
+ * WAL_CLOSED    - the owner is not open
+ * WAL_FULL      - caller-selected region capacity exhausted
+ */
 typedef enum WalCode {
     WAL_OK = 0,
-    WAL_INVALID = 1, /** null/illegal argument, unknown op, or an over-large payload */
-    WAL_IO = 2, /** the OS refused a read, write, sync, seek or truncate */
-    WAL_CORRUPT = 3, /** a complete record failed its checksum (never skipped) */
-    WAL_TRUNCATED = 4, /** an incomplete trailing record was dropped */
-    WAL_CLOSED = 5, /** the owner is not open */
-    WAL_FULL = 6, /** caller-selected region capacity exhausted */
+    WAL_INVALID = 1,
+    WAL_IO = 2,
+    WAL_CORRUPT = 3,
+    WAL_TRUNCATED = 4,
+    WAL_CLOSED = 5,
+    WAL_FULL = 6,
 } WalCode;
 
 typedef enum WalOp {
@@ -99,7 +107,7 @@ typedef struct Wal {
  * such an owner closed; Wal_1 retains its legacy open-state behavior.
  */
 Wal *Wal_0();
-Wal *Wal_1(const utf8 *path);
+Wal *Wal_1(string path);
 /**
  * Existing regular file only; trusted host excludes every alias. No create,
  * resize or checkpoint. Capacity is an explicit finite journal safety bound.
@@ -107,13 +115,13 @@ Wal *Wal_1(const utf8 *path);
  * must Wal_sync the marker BEFORE applying redo to data pages. IO failure poisons
  * this owner until reopen. An uncommitted tail is ignored and overwritten.
  */
-Wal *Wal_3(const utf8 *path, u64 offset, u64 capacity);
+Wal *Wal_3(string path, u64 offset, u64 capacity);
 #define Wal(...) CONSTRUCTOR_DISPATCH(Wal, __VA_ARGS__)
 #define Wal_zero() Wal_0()
 
 fn        Wal_free(Wal *self);
 bool        Wal_isOpen(const Wal *self);
-const utf8 *Wal_path(const Wal *self);
+string Wal_path(const Wal *self);
 WalCode     Wal_code(const Wal *self);
 u64    Wal_sequence(const Wal *self);
 u64    Wal_baseSequence(const Wal *self);
@@ -143,7 +151,7 @@ WalCode Wal_replay(Wal *self, u8 *scratch, bytes scratchCap,
  * counting up across a checkpoint; it never restarts.
  */
 WalCode Wal_checkpoint(Wal *self);
-const utf8 *Wal_codeName(WalCode code);
+string Wal_codeName(WalCode code);
 
 bool Wal_toString(const Wal *self, utf8 *dest, bytes capacity, bool *outTruncated);
 bool Wal_toStringStruct(const Wal *self, utf8 *dest, bytes capacity, bool *outTruncated);

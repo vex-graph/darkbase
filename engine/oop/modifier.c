@@ -1,6 +1,6 @@
 #include "vex.h"
 #include "oop/modifier.h"
-#include "re/primitive/char_sequence.h"
+#include "re/primitive/vex-string.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -20,15 +20,14 @@
  * pass one by value. That is also why there is no registry id: like
  * DatabaseFieldSpan, it is a described value, not an allocated owner.
  *
- * INTENTIONAL(vex): the keyword set is closed. Flexibility lives in schema
- * VERSIONING and field VISIBILITY, a field is hidden or a new version is
- * published, never re-declared in place. You do not change a data type just
- * because it is that; the whole point of freezing the words is that an old row
- * written under one declaration keeps meaning the same thing forever. A new
- * keyword later is a breaking change the way a new Java keyword is, which is
- * exactly why nothing else is allowed in this set: key, unique, indexed,
- * default, computed, lifecycle, retention and audit mode are extensible
- * ATTRIBUTES, not modifiers.
+ * The keyword set is closed. Flexibility lives in schema VERSIONING and field
+ * VISIBILITY, a field is hidden or a new version is published, never
+ * re-declared in place. You do not change a data type just because it is that;
+ * the whole point of freezing the words is that an old row written under one
+ * declaration keeps meaning the same thing forever. A new keyword later is a
+ * breaking change the way a new Java keyword is, which is exactly why nothing
+ * else is allowed in this set: key, unique, indexed, default, computed,
+ * lifecycle, retention and audit mode are extensible ATTRIBUTES, not modifiers.
  *
  * The three axes are orthogonal, so the only structurally illegal state is an
  * axis outside its enum; Modifier_validate catches that and names the axis.
@@ -41,6 +40,7 @@
  * the terminal schema meet in one value and one validator. Parsing is cold and
  * THROWs once per rejection; reading a copy is lock-free because a Modifier is
  * immutable once constructed. */
+;;INTENTION("Modifier keyword set is closed on purpose; flexibility lives in schema versioning, field visibility, and extensible attributes")
 ;;OVERVIEW
 /** ========================================================================
  * CLASS: Modifier (oop/modifier.c)
@@ -82,11 +82,11 @@
  *     bool Modifier_isPublic/isPrivate/isProtected/isReversible/isOneWay/isLossy
  *     bool Modifier_equals(Modifier a, Modifier b.sh)
  *   Naming:
- *     const utf8 *Modifier_accessName/protectionName/nullabilityName/codeName
- *     const utf8 *Modifier_warningName(u32 warning)
+ *     string Modifier_accessName/protectionName/nullabilityName/codeName
+ *     string Modifier_warningName(u32 warning)
  *   Terminal path:
- *     Modifier Modifier_parse(const utf8 *text)
- *     Modifier Modifier_applyToken(Modifier self, const utf8 *token)
+ *     Modifier Modifier_parse(string text)
+ *     Modifier Modifier_applyToken(Modifier self, string token)
  *   Projections:
  *     bool Modifier_toString(Modifier self, utf8 *dest, bytes capacity,
  *                            bool *outTruncated)
@@ -114,51 +114,51 @@ typedef enum ModifierAxis {
     MODIFIER_AXIS_SHARED = 5,
 } ModifierAxis;
 
-static ModifierAxis classify(const utf8 *token) {
+static ModifierAxis classify(string token) {
     if (token == nullptr || token[0] == '\0')
         return MODIFIER_AXIS_NONE;
-    CharSequence seq = CharSequence_cstr(token);
-    if (CharSequence_equals(seq, CharSequence_cstr("private")) ||
-        CharSequence_equals(seq, CharSequence_cstr("public")))
+    string seq = token;
+    if (string_equals(seq, "private") ||
+        string_equals(seq, "public"))
         return MODIFIER_AXIS_ACCESS;
-    if (CharSequence_equals(seq, CharSequence_cstr("plain")) ||
-        CharSequence_equals(seq, CharSequence_cstr("hashed")) ||
-        CharSequence_equals(seq, CharSequence_cstr("client-sealed")) ||
-        CharSequence_equals(seq, CharSequence_cstr("server-sealed")) ||
-        CharSequence_equals(seq, CharSequence_cstr("truncated")))
+    if (string_equals(seq, "plain") ||
+        string_equals(seq, "hashed") ||
+        string_equals(seq, "client-sealed") ||
+        string_equals(seq, "server-sealed") ||
+        string_equals(seq, "truncated"))
         return MODIFIER_AXIS_PROTECTION;
-    if (CharSequence_equals(seq, CharSequence_cstr("nullable")) ||
-        CharSequence_equals(seq, CharSequence_cstr("nonnull")))
+    if (string_equals(seq, "nullable") ||
+        string_equals(seq, "nonnull"))
         return MODIFIER_AXIS_NULLABILITY;
-    if (CharSequence_equals(seq, CharSequence_cstr("transient")))
+    if (string_equals(seq, "transient"))
         return MODIFIER_AXIS_TRANSIENT;
-    if (CharSequence_equals(seq, CharSequence_cstr("static")))
+    if (string_equals(seq, "static"))
         return MODIFIER_AXIS_SHARED;
     return MODIFIER_AXIS_NONE;
 }
 
-static Modifier applyAxis(Modifier self, ModifierAxis axis, const utf8 *token) {
-    CharSequence seq = CharSequence_cstr(token);
+static Modifier applyAxis(Modifier self, ModifierAxis axis, string token) {
+    string seq = token;
     switch (axis) {
         case MODIFIER_AXIS_ACCESS:
-            self.access = CharSequence_equals(seq, CharSequence_cstr("public"))
+            self.access = string_equals(seq, "public")
                 ? (u32) MODIFIER_ACCESS_PUBLIC
                 : (u32) MODIFIER_ACCESS_PRIVATE;
             break;
         case MODIFIER_AXIS_PROTECTION:
-            if (CharSequence_equals(seq, CharSequence_cstr("hashed")))
+            if (string_equals(seq, "hashed"))
                 self.protection = (u32) MODIFIER_PROTECTION_HASHED;
-            else if (CharSequence_equals(seq, CharSequence_cstr("client-sealed")))
+            else if (string_equals(seq, "client-sealed"))
                 self.protection = (u32) MODIFIER_PROTECTION_CLIENT_SEALED;
-            else if (CharSequence_equals(seq, CharSequence_cstr("server-sealed")))
+            else if (string_equals(seq, "server-sealed"))
                 self.protection = (u32) MODIFIER_PROTECTION_SERVER_SEALED;
-            else if (CharSequence_equals(seq, CharSequence_cstr("truncated")))
+            else if (string_equals(seq, "truncated"))
                 self.protection = (u32) MODIFIER_PROTECTION_TRUNCATED;
             else
                 self.protection = (u32) MODIFIER_PROTECTION_PLAIN;
             break;
         case MODIFIER_AXIS_NULLABILITY:
-            self.nullability = CharSequence_equals(seq, CharSequence_cstr("nonnull"))
+            self.nullability = string_equals(seq, "nonnull")
                 ? (u32) MODIFIER_NONNULL
                 : (u32) MODIFIER_NULLABLE;
             break;
@@ -288,7 +288,7 @@ bool Modifier_equals(Modifier a, Modifier b) {
            a.shared == b.shared;
 }
 
-const utf8 *Modifier_accessName(ModifierAccess access) {
+string Modifier_accessName(ModifierAccess access) {
     switch (access) {
         case MODIFIER_ACCESS_PRIVATE: return "private";
         case MODIFIER_ACCESS_PUBLIC: return "public";
@@ -296,7 +296,7 @@ const utf8 *Modifier_accessName(ModifierAccess access) {
     }
 }
 
-const utf8 *Modifier_protectionName(ModifierProtection protection) {
+string Modifier_protectionName(ModifierProtection protection) {
     switch (protection) {
         case MODIFIER_PROTECTION_PLAIN: return "plain";
         case MODIFIER_PROTECTION_HASHED: return "hashed";
@@ -307,7 +307,7 @@ const utf8 *Modifier_protectionName(ModifierProtection protection) {
     }
 }
 
-const utf8 *Modifier_nullabilityName(ModifierNullability nullability) {
+string Modifier_nullabilityName(ModifierNullability nullability) {
     switch (nullability) {
         case MODIFIER_NULLABLE: return "nullable";
         case MODIFIER_NONNULL: return "nonnull";
@@ -315,7 +315,7 @@ const utf8 *Modifier_nullabilityName(ModifierNullability nullability) {
     }
 }
 
-const utf8 *Modifier_codeName(ModifierCode code) {
+string Modifier_codeName(ModifierCode code) {
     switch (code) {
         case MODIFIER_OK: return "OK";
         case MODIFIER_INVALID: return "INVALID";
@@ -328,7 +328,7 @@ const utf8 *Modifier_codeName(ModifierCode code) {
     }
 }
 
-const utf8 *Modifier_warningName(u32 warning) {
+string Modifier_warningName(u32 warning) {
     switch (warning) {
         case MODIFIER_WARNING_NONE: return "none";
         case MODIFIER_WARNING_PUBLIC_VERIFIER: return "public-verifier";
@@ -339,7 +339,7 @@ const utf8 *Modifier_warningName(u32 warning) {
     }
 }
 
-Modifier Modifier_applyToken(Modifier self, const utf8 *token) {
+Modifier Modifier_applyToken(Modifier self, string token) {
     ModifierAxis axis = classify(token);
     if (axis == MODIFIER_AXIS_NONE) {
         self.lastCode = MODIFIER_BAD_TOKEN;
@@ -352,7 +352,7 @@ Modifier Modifier_applyToken(Modifier self, const utf8 *token) {
     return self;
 }
 
-Modifier Modifier_parse(const utf8 *text) {
+Modifier Modifier_parse(string text) {
     Modifier self = Modifier_0();
     if (text == nullptr) {
         self.lastCode = MODIFIER_INVALID;
@@ -361,7 +361,7 @@ Modifier Modifier_parse(const utf8 *text) {
     }
     bool seen[5] = { false, false, false, false, false };
     bytes count = 0u;
-    const utf8 *cursor = text;
+    string cursor = text;
     while (*cursor != '\0') {
         cursor += strspn(cursor, " \t\r\n");
         if (*cursor == '\0')

@@ -53,8 +53,8 @@ typedef struct Store {
 } Store;
 
 Store *Store_0();
-Store *Store_1(const utf8 *path); /** reopen; geometry comes from verified bootstrap */
-Store *Store_4(const utf8 *path, bytes reserved, u32 pageSize, bytes journalBytes);
+Store *Store_1(string path); /** reopen; geometry comes from verified bootstrap */
+Store *Store_4(string path, bytes reserved, u32 pageSize, bytes journalBytes);
 #define Store(...) CONSTRUCTOR_DISPATCH(Store, __VA_ARGS__)
 #define Store_zero() Store_0()
 fn Store_free(Store *self); /** no implicit sync or acknowledgement */
@@ -87,7 +87,7 @@ u64 Store_exhaustionCount(const Store *self);
 fn Store_setCommitObserver(Store *self, StoreCommitObserver observer, any context);
 StoreCommitObserver Store_getCommitObserver(const Store *self);
 any Store_getObserverContext(const Store *self);
-const utf8 *Store_codeName(StoreCode code);
+string Store_codeName(StoreCode code);
 bool Store_toString(const Store *self, utf8 *dest, bytes capacity, bool *outTruncated);
 bool Store_toStringStruct(const Store *self, utf8 *dest, bytes capacity, bool *outTruncated);
 

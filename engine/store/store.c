@@ -47,8 +47,8 @@
  *   StoreCommitObserver observer, optional non-reentrant observer
  *   any observerContext, borrowed observer-owned context
  * FUNCTION REGISTRY (exports):
- *   Store *Store_0(); Store *Store_1(const utf8 *path);
- *   Store *Store_4(const utf8 *path, bytes reserved, u32 pageSize,
+ *   Store *Store_0(); Store *Store_1(string path);
+ *   Store *Store_4(string path, bytes reserved, u32 pageSize,
  *                  bytes journalBytes); fn Store_free(Store *self);
  *   StoreCode Store_add(Store*, u32, const u8*, u32, u32*);
  *   StoreCode Store_page_write(Store*, u32, u32, const u8*, u32);
@@ -62,7 +62,7 @@
  *   u64 Store_sequence(const Store*); u64 Store_exhaustionCount(const Store*);
  *   fn Store_setCommitObserver(Store*, StoreCommitObserver, any);
  *   StoreCommitObserver Store_getCommitObserver(const Store*);
- *   any Store_getObserverContext(const Store*); const utf8 *Store_codeName(StoreCode);
+ *   any Store_getObserverContext(const Store*); string Store_codeName(StoreCode);
  *   bool Store_toString(const Store*, utf8*, bytes, bool*);
  *   bool Store_toStringStruct(const Store*, utf8*, bytes, bool*);
  * PRIVATE (static): read32/read64/put32/put64 native byte copies; reject/full/admit
@@ -75,10 +75,7 @@
  * ========================================================================== */
 ;;INTENTION("derived geometry/backing/count/sequence change only through lifecycle and durable redo; raw setters would forge ownership per the Conflict Triage Law + Single Class Per File Law (Java Law)")
 
-/**
- * INTENTIONAL(vex): persisted integers are copied in native memory order on the
- * little-endian host floor; there is no byte swapping or parallel schema format.
- */
+;;INTENTION("persisted integers are copied in native memory order on the little-endian host floor; no byte swapping or parallel schema format")
 static const u8 storeMagic[8] = {'V','E','X','D','B','0','2',0};
 #define STORE_REDO_MAGIC 0x31524453u
 #define STORE_ALLOCATE 1u
@@ -272,7 +269,7 @@ static inline fn Store_setObserverContext(Store *self, any ctx)
     (*self).observerContext = ctx;
 }
 
-static StoreCode reject(Store *self, StoreCode code, const utf8 *why) {
+static StoreCode reject(Store *self, StoreCode code, string why) {
     if (self != nullptr)
         Store_setCode(self, code);
     THROW("Store: %s", why);
@@ -435,7 +432,7 @@ static bool replay(any context, const WalRecord *record)
     return apply((Store*) context, record);
 }
 
-Store *Store_4(const utf8 *path, bytes reserved, u32 pageSize, bytes journalBytes) {
+Store *Store_4(string path, bytes reserved, u32 pageSize, bytes journalBytes) {
     if (path == nullptr || path[0] == '\0' || !geometry(reserved, pageSize, journalBytes)) {
         reject(nullptr, STORE_INVALID, "invalid path or reservation/journal geometry");
         return nullptr;
@@ -477,7 +474,7 @@ failure:
     return nullptr;
 }
 
-Store *Store_1(const utf8 *path) {
+Store *Store_1(string path) {
     if (path == nullptr || path[0] == '\0') {
         reject(nullptr, STORE_INVALID, "empty reopen path");
         return nullptr;
@@ -747,7 +744,7 @@ any Store_getObserverContext(const Store *self)
 {
     return self == nullptr ? nullptr : Store_observerContext(self);
 }
-const utf8 *Store_codeName(StoreCode code) {
+string Store_codeName(StoreCode code) {
     switch (code) {
         case STORE_OK: return "ok";
         case STORE_INVALID: return "invalid";

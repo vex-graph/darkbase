@@ -36,15 +36,24 @@
 #define DB_ENTITY_NAME_MAX 23u
 #define DB_ERROR_MESSAGE_MAX 128u
 
-/** Cold rejection codes (Database_errorCode). DATABASE_OK is success. */
+/**
+ * Cold rejection codes (Database_errorCode). DATABASE_OK is success.
+ *
+ * DATABASE_INVALID   - null or illegal argument
+ * DATABASE_DUPLICATE - an entity with the name is already registered
+ * DATABASE_ABSENT    - no such entity / row
+ * DATABASE_EXHAUSTED - row-list allocation failed
+ * DATABASE_IO        - durable page-store operation failed
+ * DATABASE_CORRUPT   - durable catalog/page stream rejected
+ */
 typedef enum DatabaseCode {
     DATABASE_OK = 0,
-    DATABASE_INVALID = 1, /** null or illegal argument */
-    DATABASE_DUPLICATE = 2, /** an entity with the name is already registered */
-    DATABASE_ABSENT = 3, /** no such entity / row */
-    DATABASE_EXHAUSTED = 4, /** row-list allocation failed */
-    DATABASE_IO = 5, /** durable page-store operation failed */
-    DATABASE_CORRUPT = 6, /** durable catalog/page stream rejected */
+    DATABASE_INVALID = 1,
+    DATABASE_DUPLICATE = 2,
+    DATABASE_ABSENT = 3,
+    DATABASE_EXHAUSTED = 4,
+    DATABASE_IO = 5,
+    DATABASE_CORRUPT = 6,
 } DatabaseCode;
 
 typedef struct Store Store;
@@ -262,35 +271,35 @@ bool Database_check(const Database *self, u64 typeId);
  */
 i32 Database_define(Database *self, Struct *schema);
 /** Register index for a folded name, or -1 when absent/invalid (null-safe). */
-i32 Database_entityIndex(const Database *self, const utf8 *entity);
+i32 Database_entityIndex(const Database *self, string entity);
 /** Live entity count. */
 u32 Database_entityCount(const Database *self);
 /** The borrowed schema for an entity, or null (null-safe). */
-Struct *Database_schema(const Database *self, const utf8 *entity);
+Struct *Database_schema(const Database *self, string entity);
 
 /** Bind a caller-owned live row to an entity. Returns the row index, or -1. */
-i32 Database_insert(Database *self, const utf8 *entity, any row);
+i32 Database_insert(Database *self, string entity, any row);
 /**
  * Copy one exact schema-stride row into Database ownership. An entity is either
  * entirely borrowed (Database_insert) or owned (loaded / insertOwned); rows do
  * not mix ownership modes. Returns the row index, or -1 without mutation.
  */
-i32 Database_insertOwned(Database *self, const utf8 *entity, const_any rowBytes,
+i32 Database_insertOwned(Database *self, string entity, const_any rowBytes,
                              bytes rowBytesLength);
 /** The row pointer at an index, or null (null-safe). */
-any Database_row(const Database *self, const utf8 *entity, u32 index);
+any Database_row(const Database *self, string entity, u32 index);
 /** Live rows bound to an entity (0 when absent). */
-u32 Database_count(const Database *self, const utf8 *entity);
+u32 Database_count(const Database *self, string entity);
 /** A fresh dest-last cursor over an entity's rows, or null when absent. */
-DatabaseResult *Database_select(Database *self, const utf8 *entity);
+DatabaseResult *Database_select(Database *self, string entity);
 /**
  * Cold raw-byte equality predicate over one reflected Field. The Field must
  * have a nonzero in-row size and a range contained in Struct.size. Result owns
  * its pointer-list container but borrows the matching row values; free it before
  * Database. Equal values use exact byte equality, not numeric conversion.
  */
-DatabaseResult *Database_queryEqual(Database *self, const utf8 *entity,
-                                    const utf8 *field, const_any value,
+DatabaseResult *Database_queryEqual(Database *self, string entity,
+                                    string field, const_any value,
                                     bytes valueLength);
 /**
  * Inclusive signed int32 range query: the field bytes are interpreted as a
@@ -300,8 +309,8 @@ DatabaseResult *Database_queryEqual(Database *self, const utf8 *entity,
  * Database_indexBuild) and otherwise scans the row list; both return the same
  * matches, though the indexed path yields them in key order.
  */
-DatabaseResult *Database_queryInt32Range(Database *self, const utf8 *entity,
-                                         const utf8 *field, i32 minimum,
+DatabaseResult *Database_queryInt32Range(Database *self, string entity,
+                                         string field, i32 minimum,
                                          i32 maximum);
 
 /**
@@ -314,8 +323,8 @@ DatabaseResult *Database_queryInt32Range(Database *self, const utf8 *entity,
  * Result code is DATABASE_OK, DATABASE_ABSENT (unknown entity or field) or
  * DATABASE_INVALID (null/malformed/ambiguous/out-of-row).
  */
-DatabaseFieldSpan Database_fieldSpan(const Database *self, const utf8 *entity,
-                                     const utf8 *field);
+DatabaseFieldSpan Database_fieldSpan(const Database *self, string entity,
+                                     string field);
 
 /**
  * --- In-memory integer index ---
@@ -328,9 +337,9 @@ DatabaseFieldSpan Database_fieldSpan(const Database *self, const utf8 *entity,
  * persisted, and a load drops them while the definition survives for the next
  * query. Returns a DATABASE_* code.
  */
-i32 Database_indexBuild(Database *self, const utf8 *entity, const utf8 *field);
+i32 Database_indexBuild(Database *self, string entity, string field);
 /** True when the entity declares an index for that field (records may be stale). */
-bool Database_indexed(const Database *self, const utf8 *entity, const utf8 *field);
+bool Database_indexed(const Database *self, string entity, string field);
 
 /**
  * --- Persistence (M2, .vexdb) ---
@@ -341,8 +350,8 @@ bool Database_indexed(const Database *self, const utf8 *entity, const utf8 *fiel
  * Returns a DATABASE_* code. Flat native-endian row Bytes; big-endian is out of
  * scope for this slice.
  */
-i32 Database_save(Database *self, const utf8 *path);
-i32 Database_load(Database *self, const utf8 *path);
+i32 Database_save(Database *self, string path);
+i32 Database_load(Database *self, string path);
 /**
  * Page-store persistence is a separate v1 path; it does not replace the legacy
  * flat snapshot API. Caller owns Store and supplies the same reflected schemas
@@ -364,7 +373,7 @@ i32 Database_errorCode(const Database *self);
 /** Bounded copy of the last error message (dest-last); returns length or -1. */
 i32 Database_lastError(const Database *self, utf8 *out, bytes outCap);
 /** Static text for a DATABASE_* code (never null). */
-const utf8 *Database_errorText(i32 code);
+string Database_errorText(i32 code);
 
 fn Database_toString(const Database *self, utf8 *dest, bytes cap, bool *outTruncated);
 fn Database_toStringStruct(const Database *self, utf8 *dest, bytes cap, bool *outTruncated);

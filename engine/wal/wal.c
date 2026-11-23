@@ -73,11 +73,11 @@
  *               prefix20 at offset8, payload at28, CRC at28 + payload length.
  *               total record bytes = 32 + payload length; header occupies 24B.
  * FUNCTION REGISTRY (exports)
- *   Constructors: Wal *Wal_0(), Wal *Wal_1(const utf8 *path)
- *                 Wal *Wal_3(const utf8 *path, u64 offset, u64 capacity)
+ *   Constructors: Wal *Wal_0(), Wal *Wal_1(string path)
+ *                 Wal *Wal_3(string path, u64 offset, u64 capacity)
  *   Lifecycle:    fn Wal_free(Wal *self)
  *                 bool Wal_isOpen(const Wal *self)
- *                 const utf8 *Wal_path(const Wal *self)
+ *                 string Wal_path(const Wal *self)
  *                 WalCode Wal_code(const Wal *self)
  *   Appends:      WalCode Wal_append(Wal *self, u32 op,
  *                   const u8 *payload, u32 length, u64 *outSequence)
@@ -89,7 +89,7 @@
  *                 u32 Wal_count(const Wal *self)
  *                 u32 Wal_recovered(const Wal *self)
  *                 bool Wal_tailTorn(const Wal *self)
- *                 const utf8 *Wal_codeName(WalCode code)
+ *                 string Wal_codeName(WalCode code)
  *                 u64 Wal_remaining(const Wal *self)
  *                 u64 Wal_exhaustionCount(const Wal *self)
  *   Projections:  bool Wal_toString(const Wal *self, utf8 *dest, bytes capacity,
@@ -528,7 +528,7 @@ static WalCode scanRegion(Wal *self, u8 *scratch, bytes cap,
 }
 
 ;;CONSTRUCTOR
-static Wal *allocWal(const utf8 *path) {
+static Wal *allocWal(string path) {
     bytes length = strlen(path);
     if (length == 0u || length >= WAL_PATH_MAX) {
         THROW("Wal: path is empty or too long");
@@ -554,7 +554,7 @@ Wal *Wal_0() {
     return self;
 }
 
-Wal *Wal_1(const utf8 *path) {
+Wal *Wal_1(string path) {
     if (path == nullptr) {
         THROW("Wal_1: null path");
         return nullptr;
@@ -575,13 +575,12 @@ Wal *Wal_1(const utf8 *path) {
     if (code == WAL_OK)
         code = scanRecords(self, nullptr, 0u, nullptr, nullptr, true);
     Wal_setLastCode(self, code);
-    if (code == WAL_CORRUPT) {
+    if (code == WAL_CORRUPT)
         THROW("Wal_1: the log header or a record is corrupt");
-    }
     return self;
 }
 
-Wal *Wal_3(const utf8 *path, u64 offset, u64 capacity) {
+Wal *Wal_3(string path, u64 offset, u64 capacity) {
     if (path == nullptr || capacity < WAL_HEADER_BYTES || offset > INT64_MAX ||
         capacity > (u64) INT64_MAX - offset) {
         THROW("Wal_3: invalid path or region extent");
@@ -642,7 +641,7 @@ bool Wal_isOpen(const Wal *self)
 {
     return self != nullptr && Wal_open(self);
 }
-const utf8 *Wal_path(const Wal *self)
+string Wal_path(const Wal *self)
 {
     return self == nullptr ? "" : (*self).path;
 }
@@ -862,7 +861,7 @@ WalCode Wal_checkpoint(Wal *self) {
     return WAL_OK;
 }
 
-const utf8 *Wal_codeName(WalCode code) {
+string Wal_codeName(WalCode code) {
     switch (code) {
         case WAL_OK:        return "ok";
         case WAL_INVALID:   return "invalid";
@@ -876,7 +875,7 @@ const utf8 *Wal_codeName(WalCode code) {
 }
 
 static bool writeNull(utf8 *dest, bytes capacity, bool *outTruncated) {
-    const utf8 *text = "nullptr";
+    string text = "nullptr";
     bytes length = strlen(text);
     bool cut = length + 1u > capacity;
     bytes copy = cut ? capacity - 1u : length;
@@ -908,7 +907,7 @@ bool Wal_toString(const Wal *self, utf8 *dest, bytes capacity, bool *outTruncate
     return !cut;
 }
 
-static fn quotePath(const utf8 *path, utf8 dest[WAL_PATH_MAX * 4u + 3u]) {
+static fn quotePath(string path, utf8 dest[WAL_PATH_MAX * 4u + 3u]) {
     static const utf8 hex[] = "0123456789abcdef";
     bytes used = 0u;
     dest[used++] = '"';
