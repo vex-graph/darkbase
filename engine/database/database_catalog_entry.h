@@ -5,12 +5,14 @@
 
 #define DB_ENTITY_NAME_BYTES 24u
 
-// One reflected entity's persisted catalog metadata. This is a value record;
-// it owns no Store, page, schema, or row memory.
+/**
+ * One reflected entity's persisted catalog metadata. This is a value record;
+ * it owns no Store, page, schema, or row memory.
+ */
 typedef struct DatabaseCatalogEntry {
-    i32 code; // DATABASE_OK when found; otherwise the admission failure
+    i32 code; /** DATABASE_OK when found; otherwise the admission failure */
     bool found;
-    char name[DB_ENTITY_NAME_BYTES];
+    utf8 name[DB_ENTITY_NAME_BYTES];
     u32 rowStride;
     u32 rowCount;
 } DatabaseCatalogEntry;

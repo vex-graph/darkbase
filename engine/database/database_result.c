@@ -1,4 +1,4 @@
-// database/database_result.c — the DatabaseResult row cursor.
+/** database/database_result.c, the DatabaseResult row cursor. */
 
 #include "vex.h"
 #include "database/database_result.h"
@@ -8,6 +8,7 @@
 #include "oop/darkbase_type.h"
 #include "nio/mem.h"
 #include "oop/darkbase_type.h"
+#include "nio/darkbase_memory.h"
 
 ;;DEFINITION
 /**
@@ -52,29 +53,50 @@
  * ============================================================================
  */
 
-// CONSTRUCTORS
+/** CONSTRUCTORS */
 
 ;;GETTER
-static inline ChunkedList *DatabaseResult_rows(const DatabaseResult *self) { return (*self).rows; }
+static inline ChunkedList *DatabaseResult_rows(const DatabaseResult *self)
+{
+    return (*self).rows;
+}
 ;;SETTER
-static inline fn DatabaseResult_setRows(DatabaseResult *self, ChunkedList *rows) { (*self).rows = rows; }
+static inline fn DatabaseResult_setRows(DatabaseResult *self, ChunkedList *rows)
+{
+    (*self).rows = rows;
+}
 ;;SETTER
-static inline fn DatabaseResult_setCount(DatabaseResult *self, u32 count) { (*self).count = count; }
+static inline fn DatabaseResult_setCount(DatabaseResult *self, u32 count)
+{
+    (*self).count = count;
+}
 ;;GETTER
-static inline u32 DatabaseResult_cursor(const DatabaseResult *self) { return (*self).cursor; }
+static inline u32 DatabaseResult_cursor(const DatabaseResult *self)
+{
+    return (*self).cursor;
+}
 ;;SETTER
-static inline fn DatabaseResult_setCursor(DatabaseResult *self, u32 cursor) { (*self).cursor = cursor; }
+static inline fn DatabaseResult_setCursor(DatabaseResult *self, u32 cursor)
+{
+    (*self).cursor = cursor;
+}
 ;;GETTER
-static inline u32 DatabaseResult_ownsRows(const DatabaseResult *self) { return (*self).ownsRows; }
+static inline u32 DatabaseResult_ownsRows(const DatabaseResult *self)
+{
+    return (*self).ownsRows;
+}
 ;;SETTER
-static inline fn DatabaseResult_setOwnsRows(DatabaseResult *self, u32 ownsRows) { (*self).ownsRows = ownsRows; }
+static inline fn DatabaseResult_setOwnsRows(DatabaseResult *self, u32 ownsRows)
+{
+    (*self).ownsRows = ownsRows;
+}
 
 /**
  * Allocates an empty cursor with no row source; returns nullptr if allocation
  * fails.
  */
 DatabaseResult *DatabaseResult_0() {
-    DatabaseResult *self = (DatabaseResult*) Memory_alloc(TYPE_DB_DATABASE_RESULT_SINGLETON, sizeof(DatabaseResult));
+    DatabaseResult *self = (DatabaseResult*) Memory_alloc(TYPE_DB_DATABASE_RESULT_SINGLETON, Darkbase_arena(), sizeof(DatabaseResult));
     if (self == nullptr)
         return nullptr;
     DatabaseResult_setRows(self, nullptr);
@@ -119,7 +141,7 @@ fn DatabaseResult_free(DatabaseResult *self) {
     }
 }
 
-// CORE FUNCTIONS
+/** CORE FUNCTIONS */
 
 /**
  * Returns the allocation's runtime type id, or zero for a null result.
@@ -183,13 +205,13 @@ fn DatabaseResult_rewind(DatabaseResult *self) {
         DatabaseResult_setCursor(self, 0u);
 }
 
-// STRING PROJECTIONS (the toString Law)
+/** STRING PROJECTIONS (the toString Law) */
 
 /**
  * Formats a bounded cursor-position summary; null self formats as "nullptr"
  * and truncation is reported through outTruncated when supplied.
  */
-fn DatabaseResult_toString(const DatabaseResult *self, char *dest, bytes cap, bool *outTruncated) {
+fn DatabaseResult_toString(const DatabaseResult *self, utf8 *dest, bytes cap, bool *outTruncated) {
     if (outTruncated)
         *outTruncated = false;
     if (dest == nullptr || cap == 0u)
@@ -210,7 +232,7 @@ fn DatabaseResult_toString(const DatabaseResult *self, char *dest, bytes cap, bo
  * Formats the cursor's own fields into a bounded structure summary; null self
  * formats as "nullptr" and truncation is reported when possible.
  */
-fn DatabaseResult_toStringStruct(const DatabaseResult *self, char *dest, bytes cap, bool *outTruncated) {
+fn DatabaseResult_toStringStruct(const DatabaseResult *self, utf8 *dest, bytes cap, bool *outTruncated) {
     if (outTruncated)
         *outTruncated = false;
     if (dest == nullptr || cap == 0u)

@@ -5,6 +5,7 @@
 #include "io/file/file.h"
 #include "nio/mem.h"
 #include "oop/darkbase_type.h"
+#include "nio/darkbase_memory.h"
 
 ;;DEFINITION
 /* Store is the first page-level durable owner, not a replacement spelling for the
@@ -27,27 +28,27 @@
 /* ============================================================================
  * CLASS: Store (store/store.c)
  * STRUCT FIELDS (Mirroring store/store.h), declaration order:
- *   ReGrowableMappedFile *mapping — resident reservation owner, dropped last
- *   Wal *wal — embedded redo descriptor in the same physical file
- *   Page *page — detached page builder/validator over scratch
- *   u8 *scratch — owned pageSize-byte scratch
- *   u8 *redo — owned STORE_REDO_BYTES + pageSize record
- *   bytes reserved — immutable virtual extent
- *   bytes journalBytes — caller-selected retained journal bound
- *   bytes dataOffset — checked first data-page offset
- *   u32 pageSize — immutable validated geometry
- *   u32 pageCount — allocation high-water id
- *   u32 freeHead — reusable free-page chain
- *   u64 sequence — last applied redo sequence
- *   u64 refusals — observable epoch capacity refusals
- *   StoreCode code — last public result
- *   bool open — fully admitted owner
- *   bool blocked — uncertain commit, close/reopen required
- *   StoreCommitObserver observer — optional non-reentrant observer
- *   any observerContext — borrowed observer-owned context
+ *   ReGrowableMappedFile *mapping, resident reservation owner, dropped last
+ *   Wal *wal, embedded redo descriptor in the same physical file
+ *   Page *page, detached page builder/validator over scratch
+ *   u8 *scratch, owned pageSize-byte scratch
+ *   u8 *redo, owned STORE_REDO_BYTES + pageSize record
+ *   bytes reserved, immutable virtual extent
+ *   bytes journalBytes, caller-selected retained journal bound
+ *   bytes dataOffset, checked first data-page offset
+ *   u32 pageSize, immutable validated geometry
+ *   u32 pageCount, allocation high-water id
+ *   u32 freeHead, reusable free-page chain
+ *   u64 sequence, last applied redo sequence
+ *   u64 refusals, observable epoch capacity refusals
+ *   StoreCode code, last public result
+ *   bool open, fully admitted owner
+ *   bool blocked, uncertain commit, close/reopen required
+ *   StoreCommitObserver observer, optional non-reentrant observer
+ *   any observerContext, borrowed observer-owned context
  * FUNCTION REGISTRY (exports):
- *   Store *Store_0(); Store *Store_1(const char *path);
- *   Store *Store_4(const char *path, bytes reserved, u32 pageSize,
+ *   Store *Store_0(); Store *Store_1(const utf8 *path);
+ *   Store *Store_4(const utf8 *path, bytes reserved, u32 pageSize,
  *                  bytes journalBytes); fn Store_free(Store *self);
  *   StoreCode Store_add(Store*, u32, const u8*, u32, u32*);
  *   StoreCode Store_page_write(Store*, u32, u32, const u8*, u32);
@@ -61,9 +62,9 @@
  *   u64 Store_sequence(const Store*); u64 Store_exhaustionCount(const Store*);
  *   fn Store_setCommitObserver(Store*, StoreCommitObserver, any);
  *   StoreCommitObserver Store_getCommitObserver(const Store*);
- *   any Store_getObserverContext(const Store*); const char *Store_codeName(StoreCode);
- *   bool Store_toString(const Store*, char*, bytes, bool*);
- *   bool Store_toStringStruct(const Store*, char*, bytes, bool*);
+ *   any Store_getObserverContext(const Store*); const utf8 *Store_codeName(StoreCode);
+ *   bool Store_toString(const Store*, utf8*, bytes, bool*);
+ *   bool Store_toStringStruct(const Store*, utf8*, bytes, bool*);
  * PRIVATE (static): read32/read64/put32/put64 native byte copies; reject/full/admit
  * admission; geometry/buffers construction; loadPage/pageOffset bounds; apply redo
  * validation/application; replay visitor; build/commit detached sealing and ordered
@@ -74,87 +75,204 @@
  * ========================================================================== */
 ;;INTENTION("derived geometry/backing/count/sequence change only through lifecycle and durable redo; raw setters would forge ownership per the Conflict Triage Law + Single Class Per File Law (Java Law)")
 
-// INTENTIONAL(vex): persisted integers are copied in native memory order on the
-// little-endian host floor; there is no byte swapping or parallel schema format.
+/**
+ * INTENTIONAL(vex): persisted integers are copied in native memory order on the
+ * little-endian host floor; there is no byte swapping or parallel schema format.
+ */
 static const u8 storeMagic[8] = {'V','E','X','D','B','0','2',0};
 #define STORE_REDO_MAGIC 0x31524453u
 #define STORE_ALLOCATE 1u
 #define STORE_REPLACE 2u
 #define STORE_RELEASE 3u
 
-static u32 read32(const u8 *p) { u32 v; memcpy(&v, p, sizeof v); return v; }
-static u64 read64(const u8 *p) { u64 v; memcpy(&v, p, sizeof v); return v; }
-static fn put32(u8 *p, u32 v) { memcpy(p, &v, sizeof v); }
-static fn put64(u8 *p, u64 v) { memcpy(p, &v, sizeof v); }
+static u32 read32(const u8 *p)
+{
+    u32 v;
+    memcpy(&v, p, sizeof v);
+    return v;
+}
+static u64 read64(const u8 *p)
+{
+    u64 v;
+    memcpy(&v, p, sizeof v);
+    return v;
+}
+static fn put32(u8 *p, u32 v)
+{
+    memcpy(p, &v, sizeof v);
+}
+static fn put64(u8 *p, u64 v)
+{
+    memcpy(p, &v, sizeof v);
+}
 
 ;;GETTER
-static inline u32 WalRecord_op(const WalRecord *r) { return (*r).op; }
+static inline u32 WalRecord_op(const WalRecord *r)
+{
+    return (*r).op;
+}
 ;;GETTER
-static inline u64 WalRecord_sequence(const WalRecord *r) { return (*r).sequence; }
+static inline u64 WalRecord_sequence(const WalRecord *r)
+{
+    return (*r).sequence;
+}
 ;;GETTER
-static inline u32 WalRecord_length(const WalRecord *r) { return (*r).length; }
+static inline u32 WalRecord_length(const WalRecord *r)
+{
+    return (*r).length;
+}
 ;;GETTER
-static inline const u8 *WalRecord_payload(const WalRecord *r) { return (*r).payload; }
+static inline const u8 *WalRecord_payload(const WalRecord *r)
+{
+    return (*r).payload;
+}
 ;;GETTER
-static inline u64 Store_mapping(const Store *self) { return (*self).mapping; }
+static inline ReGrowableMappedFile *Store_mapping(const Store *self)
+{
+    return (*self).mapping;
+}
 ;;GETTER
-static inline u64 *Store_mappingMut(Store *self) { return &(*self).mapping; }
+static inline ReGrowableMappedFile **Store_mappingMut(Store *self)
+{
+    return &(*self).mapping;
+}
 ;;GETTER
-static inline Wal *Store_wal(const Store *self) { return (*self).wal; }
+static inline Wal *Store_wal(const Store *self)
+{
+    return (*self).wal;
+}
 ;;SETTER
-static inline fn Store_setWal(Store *self, Wal *wal) { (*self).wal = wal; }
+static inline fn Store_setWal(Store *self, Wal *wal)
+{
+    (*self).wal = wal;
+}
 ;;GETTER
-static inline Page *Store_page(const Store *self) { return (*self).page; }
+static inline Page *Store_page(const Store *self)
+{
+    return (*self).page;
+}
 ;;SETTER
-static inline fn Store_setPage(Store *self, Page *page) { (*self).page = page; }
+static inline fn Store_setPage(Store *self, Page *page)
+{
+    (*self).page = page;
+}
 ;;GETTER
-static inline u8 *Store_scratch(const Store *self) { return (*self).scratch; }
+static inline u8 *Store_scratch(const Store *self)
+{
+    return (*self).scratch;
+}
 ;;SETTER
-static inline fn Store_setScratch(Store *self, u8 *scratch) { (*self).scratch = scratch; }
+static inline fn Store_setScratch(Store *self, u8 *scratch)
+{
+    (*self).scratch = scratch;
+}
 ;;GETTER
-static inline u8 *Store_redo(const Store *self) { return (*self).redo; }
+static inline u8 *Store_redo(const Store *self)
+{
+    return (*self).redo;
+}
 ;;SETTER
-static inline fn Store_setRedo(Store *self, u8 *redo) { (*self).redo = redo; }
+static inline fn Store_setRedo(Store *self, u8 *redo)
+{
+    (*self).redo = redo;
+}
 ;;SETTER
-static inline fn Store_setReserved(Store *self, bytes reserved) { (*self).reserved = reserved; }
+static inline fn Store_setReserved(Store *self, bytes reserved)
+{
+    (*self).reserved = reserved;
+}
 ;;SETTER
-static inline fn Store_setJournalBytes(Store *self, bytes journalBytes) { (*self).journalBytes = journalBytes; }
+static inline fn Store_setJournalBytes(Store *self, bytes journalBytes)
+{
+    (*self).journalBytes = journalBytes;
+}
 ;;GETTER
-static inline bytes Store_dataOffset(const Store *self) { return (*self).dataOffset; }
+static inline bytes Store_dataOffset(const Store *self)
+{
+    return (*self).dataOffset;
+}
 ;;SETTER
-static inline fn Store_setDataOffset(Store *self, bytes dataOffset) { (*self).dataOffset = dataOffset; }
+static inline fn Store_setDataOffset(Store *self, bytes dataOffset)
+{
+    (*self).dataOffset = dataOffset;
+}
 ;;SETTER
-static inline fn Store_setPageSize(Store *self, u32 pageSize) { (*self).pageSize = pageSize; }
+static inline fn Store_setPageSize(Store *self, u32 pageSize)
+{
+    (*self).pageSize = pageSize;
+}
 ;;SETTER
-static inline fn Store_setPageCount(Store *self, u32 pageCount) { (*self).pageCount = pageCount; }
+static inline fn Store_setPageCount(Store *self, u32 pageCount)
+{
+    (*self).pageCount = pageCount;
+}
 ;;SETTER
-static inline fn Store_setFreeHead(Store *self, u32 freeHead) { (*self).freeHead = freeHead; }
+static inline fn Store_setFreeHead(Store *self, u32 freeHead)
+{
+    (*self).freeHead = freeHead;
+}
 ;;SETTER
-static inline fn Store_setSequence(Store *self, u64 sequence) { (*self).sequence = sequence; }
+static inline fn Store_setSequence(Store *self, u64 sequence)
+{
+    (*self).sequence = sequence;
+}
 ;;GETTER
-static inline u64 Store_refusals(const Store *self) { return (*self).refusals; }
+static inline u64 Store_refusals(const Store *self)
+{
+    return (*self).refusals;
+}
 ;;SETTER
-static inline fn Store_setRefusals(Store *self, u64 refusals) { (*self).refusals = refusals; }
+static inline fn Store_setRefusals(Store *self, u64 refusals)
+{
+    (*self).refusals = refusals;
+}
 ;;SETTER
-static inline fn Store_setCode(Store *self, StoreCode code) { (*self).code = code; }
+static inline fn Store_setCode(Store *self, StoreCode code)
+{
+    (*self).code = code;
+}
 ;;GETTER
-static inline bool Store_open(const Store *self) { return (*self).open; }
+static inline bool Store_open(const Store *self)
+{
+    return (*self).open;
+}
 ;;SETTER
-static inline fn Store_setOpen(Store *self, bool open) { (*self).open = open; }
+static inline fn Store_setOpen(Store *self, bool open)
+{
+    (*self).open = open;
+}
 ;;GETTER
-static inline bool Store_blocked(const Store *self) { return (*self).blocked; }
+static inline bool Store_blocked(const Store *self)
+{
+    return (*self).blocked;
+}
 ;;SETTER
-static inline fn Store_setBlocked(Store *self, bool blocked) { (*self).blocked = blocked; }
+static inline fn Store_setBlocked(Store *self, bool blocked)
+{
+    (*self).blocked = blocked;
+}
 ;;GETTER
-static inline StoreCommitObserver Store_observer(const Store *self) { return (*self).observer; }
+static inline StoreCommitObserver Store_observer(const Store *self)
+{
+    return (*self).observer;
+}
 ;;SETTER
-static inline fn Store_setObserver(Store *self, StoreCommitObserver obs) { (*self).observer = obs; }
+static inline fn Store_setObserver(Store *self, StoreCommitObserver obs)
+{
+    (*self).observer = obs;
+}
 ;;GETTER
-static inline any Store_observerContext(const Store *self) { return (*self).observerContext; }
+static inline any Store_observerContext(const Store *self)
+{
+    return (*self).observerContext;
+}
 ;;SETTER
-static inline fn Store_setObserverContext(Store *self, any ctx) { (*self).observerContext = ctx; }
+static inline fn Store_setObserverContext(Store *self, any ctx)
+{
+    (*self).observerContext = ctx;
+}
 
-static StoreCode reject(Store *self, StoreCode code, const char *why) {
+static StoreCode reject(Store *self, StoreCode code, const utf8 *why) {
     if (self != nullptr)
         Store_setCode(self, code);
     THROW("Store: %s", why);
@@ -191,7 +309,7 @@ static bool geometry(bytes reserved, u32 size, bytes journal) {
 }
 
 Store *Store_0() {
-    Store *self = (Store*) Memory_alloc(TYPE_DB_STORE_SINGLETON, sizeof(Store));
+    Store *self = (Store*) Memory_alloc(TYPE_DB_STORE_SINGLETON, Darkbase_arena(), sizeof(Store));
     if (self == nullptr) {
         THROW("Store: owner allocation refused");
         return nullptr;
@@ -215,10 +333,11 @@ fn Store_free(Store *self) {
     Memory_free(self);
 }
 
+;;CONSTRUCTOR
 static bool buffers(Store *self) {
     u32 pageSize = Store_pageSize(self);
-    u8 *scratch = (u8*) Memory_alloc(0u, pageSize);
-    u8 *redo = (u8*) Memory_alloc(0u, STORE_REDO_BYTES + pageSize);
+    u8 *scratch = (u8*) Memory_alloc(0u, Darkbase_arena(), pageSize);
+    u8 *redo = (u8*) Memory_alloc(0u, Darkbase_arena(), STORE_REDO_BYTES + pageSize);
     Store_setScratch(self, scratch);
     Store_setRedo(self, redo);
     if (scratch == nullptr || redo == nullptr)
@@ -300,7 +419,7 @@ static bool apply(Store *self, const WalRecord *record) {
         return false;
     bytes end = dataOffset + (bytes) count * pageSize;
     bytes current = 0u;
-    u64 mapping = Store_mapping(self);
+    ReGrowableMappedFile *mapping = Store_mapping(self);
     if (re_gmap_len(mapping, &current) != 0u ||
         (end > current && re_gmap_grow_to(mapping, end) != 0u) ||
         re_gmap_write(mapping, pageOffset(self, id), scratch, pageSize) != 0u)
@@ -311,9 +430,12 @@ static bool apply(Store *self, const WalRecord *record) {
     return true;
 }
 
-static bool replay(any context, const WalRecord *record) { return apply((Store*) context, record); }
+static bool replay(any context, const WalRecord *record)
+{
+    return apply((Store*) context, record);
+}
 
-Store *Store_4(const char *path, bytes reserved, u32 pageSize, bytes journalBytes) {
+Store *Store_4(const utf8 *path, bytes reserved, u32 pageSize, bytes journalBytes) {
     if (path == nullptr || path[0] == '\0' || !geometry(reserved, pageSize, journalBytes)) {
         reject(nullptr, STORE_INVALID, "invalid path or reservation/journal geometry");
         return nullptr;
@@ -336,7 +458,7 @@ Store *Store_4(const char *path, bytes reserved, u32 pageSize, bytes journalByte
     put64(bootstrap + 24u, journalBytes);
     put64(bootstrap + 32u, dataOffset);
     Page *page = Store_page(self);
-    u64 mapping = Store_mapping(self);
+    ReGrowableMappedFile *mapping = Store_mapping(self);
     if (Page_format(page, 0u, PAGE_KIND_CATALOG) != PAGE_OK ||
         Page_append(page, bootstrap, sizeof bootstrap) != PAGE_OK ||
         Page_seal(page) != PAGE_OK ||
@@ -355,13 +477,11 @@ failure:
     return nullptr;
 }
 
-Store *Store_1(const char *path) {
+Store *Store_1(const utf8 *path) {
     if (path == nullptr || path[0] == '\0') {
         reject(nullptr, STORE_INVALID, "empty reopen path");
         return nullptr;
     }
-    // Stable trusted path and caller exclusion cover this cold bootstrap read and
-    // Rust's subsequent retained-descriptor admission; no hostile-writer TOCTOU claim.
     u8 prefix[PAGE_HEADER_BYTES + STORE_BOOTSTRAP_BYTES];
     File *file = File_open(path, FILE_MODE_READ);
     if (file == nullptr) {
@@ -409,7 +529,6 @@ Store *Store_1(const char *path) {
     if ((code != WAL_OK && code != WAL_TRUNCATED) || Store_sequence(self) != Wal_sequence(wal) ||
         re_gmap_sync(Store_mapping(self)) != 0u)
         goto failure;
-    // Validate the complete free chain with a count-derived budget before admission.
     u32 next = Store_freeHead(self);
     u32 pageCount = Store_pageCount(self);
     Page *page = Store_page(self);
@@ -574,25 +693,61 @@ StoreCode Store_sync(Store *self) {
     return STORE_OK;
 }
 
-bool Store_isOpen(const Store *self) { return self != nullptr && Store_open(self); }
-bool Store_isBlocked(const Store *self) { return self != nullptr && Store_blocked(self); }
-StoreCode Store_code(const Store *self) { return self == nullptr ? STORE_CLOSED : (*self).code; }
-u32 Store_pageSize(const Store *self) { return self == nullptr ? 0u : (*self).pageSize; }
-u32 Store_pageCount(const Store *self) { return self == nullptr ? 0u : (*self).pageCount; }
-u32 Store_freeHead(const Store *self) { return self == nullptr ? 0u : (*self).freeHead; }
-bytes Store_reserved(const Store *self) { return self == nullptr ? 0u : (*self).reserved; }
-bytes Store_journalBytes(const Store *self) { return self == nullptr ? 0u : (*self).journalBytes; }
-u64 Store_sequence(const Store *self) { return self == nullptr ? 0u : (*self).sequence; }
-u64 Store_exhaustionCount(const Store *self) { return self == nullptr ? 0u : Store_refusals(self); }
+bool Store_isOpen(const Store *self)
+{
+    return self != nullptr && Store_open(self);
+}
+bool Store_isBlocked(const Store *self)
+{
+    return self != nullptr && Store_blocked(self);
+}
+StoreCode Store_code(const Store *self)
+{
+    return self == nullptr ? STORE_CLOSED : (*self).code;
+}
+u32 Store_pageSize(const Store *self)
+{
+    return self == nullptr ? 0u : (*self).pageSize;
+}
+u32 Store_pageCount(const Store *self)
+{
+    return self == nullptr ? 0u : (*self).pageCount;
+}
+u32 Store_freeHead(const Store *self)
+{
+    return self == nullptr ? 0u : (*self).freeHead;
+}
+bytes Store_reserved(const Store *self)
+{
+    return self == nullptr ? 0u : (*self).reserved;
+}
+bytes Store_journalBytes(const Store *self)
+{
+    return self == nullptr ? 0u : (*self).journalBytes;
+}
+u64 Store_sequence(const Store *self)
+{
+    return self == nullptr ? 0u : (*self).sequence;
+}
+u64 Store_exhaustionCount(const Store *self)
+{
+    return self == nullptr ? 0u : Store_refusals(self);
+}
 fn Store_setCommitObserver(Store *self, StoreCommitObserver observer, any context) {
     if (self != nullptr) {
         Store_setObserver(self, observer);
         Store_setObserverContext(self, context);
     }
 }
-StoreCommitObserver Store_getCommitObserver(const Store *self) { return self == nullptr ? nullptr : Store_observer(self); }
-any Store_getObserverContext(const Store *self) { return self == nullptr ? nullptr : Store_observerContext(self); }
-const char *Store_codeName(StoreCode code) {
+StoreCommitObserver Store_getCommitObserver(const Store *self)
+{
+    return self == nullptr ? nullptr : Store_observer(self);
+}
+any Store_getObserverContext(const Store *self)
+{
+    return self == nullptr ? nullptr : Store_observerContext(self);
+}
+const utf8 *Store_codeName(StoreCode code) {
     switch (code) {
         case STORE_OK: return "ok";
         case STORE_INVALID: return "invalid";
@@ -606,7 +761,7 @@ const char *Store_codeName(StoreCode code) {
     }
 }
 
-static bool project(const Store *self, bool structure, char *dest, bytes capacity, bool *outTruncated) {
+static bool project(const Store *self, bool structure, utf8 *dest, bytes capacity, bool *outTruncated) {
     if (dest == nullptr || capacity == 0u) {
         if (outTruncated != nullptr)
             *outTruncated = true;
@@ -635,9 +790,9 @@ static bool project(const Store *self, bool structure, char *dest, bytes capacit
         *outTruncated = cut;
     return !cut;
 }
-bool Store_toString(const Store *self, char *dest, bytes capacity, bool *outTruncated) {
+bool Store_toString(const Store *self, utf8 *dest, bytes capacity, bool *outTruncated) {
     return project(self, false, dest, capacity, outTruncated);
 }
-bool Store_toStringStruct(const Store *self, char *dest, bytes capacity, bool *outTruncated) {
+bool Store_toStringStruct(const Store *self, utf8 *dest, bytes capacity, bool *outTruncated) {
     return project(self, true, dest, capacity, outTruncated);
 }

@@ -6,10 +6,12 @@
 #include "wal/wal.h"
 #include "relational_engine/growable_mapped_file.h"
 
-// One file: immutable bootstrap page, caller-sized embedded redo region, data pages.
-// Single caller-owned exclusion domain, stable trusted path, no external mutation
-// or truncation for the entire open lifetime. This is not a multi-process lock.
-// All operations are cold: file faults/sync have no bounded latency guarantee.
+/**
+ * One file: immutable bootstrap page, caller-sized embedded redo region, data pages.
+ * Single caller-owned exclusion domain, stable trusted path, no external mutation
+ * or truncation for the entire open lifetime. This is not a multi-process lock.
+ * All operations are cold: file faults/sync have no bounded latency guarantee.
+ */
 #define STORE_FORMAT_VERSION 1u
 #define STORE_BOOTSTRAP_BYTES 64u
 #define STORE_REDO_BYTES 32u
@@ -20,45 +22,49 @@ typedef enum StoreCode {
     STORE_CLOSED, STORE_RECOVERY_REQUIRED, STORE_TRUNCATED
 } StoreCode;
 
-// Observation only; never reenter Store. Tests may terminate their disposable
-// child at these actual commit boundaries. No correctness decision uses a callback.
+/**
+ * Observation only; never reenter Store. Tests may terminate their disposable
+ * child at these actual commit boundaries. No correctness decision uses a callback.
+ */
 typedef fn (*StoreCommitObserver)(any context, u32 phase);
 #define STORE_AFTER_LOG_SYNC 1u
 #define STORE_AFTER_PAGE_WRITE 2u
 #define STORE_AFTER_DATA_SYNC 3u
 
 typedef struct Store {
-    ReGrowableMappedFile *mapping; // resident R2 owner, dropped last
-    Wal *wal;                     // descriptor into this SAME file's redo region
-    Page *page;                   // Page bound to scratch, never mapping-write alias
-    u8 *scratch;             // one full page, owned engine allocation
-    u8 *redo;                // STORE_REDO_BYTES + pageSize, owned allocation
-    bytes reserved;              // immutable virtual reservation
-    bytes journalBytes;          // immutable caller-selected redo capacity
-    bytes dataOffset;            // first data-page byte
-    u32 pageSize;            // immutable power-of-two geometry
-    u32 pageCount;           // high-water page id, not live page count
-    u32 freeHead;            // reusable page chain, 0 means empty
-    u64 sequence;            // last applied full redo record
-    u64 refusals;            // capacity refusals in this open epoch
-    StoreCode code;              // last operation result
-    bool open;                   // admission complete
-    bool blocked;                // uncertain commit requires close/reopen
-    StoreCommitObserver observer; // optional non-reentrant observation
-    any observerContext;       // borrowed context interpreted by observer
+    ReGrowableMappedFile *mapping;
+    Wal *wal;
+    Page *page;
+    u8 *scratch;
+    u8 *redo;
+    bytes reserved;
+    bytes journalBytes;
+    bytes dataOffset;
+    u32 pageSize;
+    u32 pageCount;
+    u32 freeHead;
+    u64 sequence;
+    u64 refusals;
+    StoreCode code;
+    bool open;
+    bool blocked;
+    StoreCommitObserver observer;
+    any observerContext;
 } Store;
 
 Store *Store_0();
-Store *Store_1(const char *path); // reopen; geometry comes from verified bootstrap
-Store *Store_4(const char *path, bytes reserved, u32 pageSize, bytes journalBytes);
+Store *Store_1(const utf8 *path); /** reopen; geometry comes from verified bootstrap */
+Store *Store_4(const utf8 *path, bytes reserved, u32 pageSize, bytes journalBytes);
 #define Store(...) CONSTRUCTOR_DISPATCH(Store, __VA_ARGS__)
 #define Store_zero() Store_0()
-fn Store_free(Store *self); // no implicit sync or acknowledgement
+fn Store_free(Store *self); /** no implicit sync or acknowledgement */
 
-// Single-page atomic redo unit, not a table/schema/row API. Input is copied and
-// sealed OFF the mapping before the journal is synced. Outputs publish on success.
-// On pre-log rejection data/state are unchanged. After a possible log write,
-// failure blocks admission; reopen resolves it, and a failed call MAY be replayed.
+/**
+ * Single-page atomic redo unit, not a table/schema/row API. Input is copied and
+ * sealed OFF the mapping before the journal is synced. Outputs publish on success.
+ * On pre-log rejection data/state are unchanged. After a possible log write,
+ * failure blocks admission; reopen resolves it, and a failed call MAY be replayed.
+ */
 StoreCode Store_add(Store *self, u32 kind, const u8 *bytes, u32 length,
                     u32 *outPageId);
 StoreCode Store_page_write(Store *self, u32 pageId, u32 kind,
@@ -66,7 +72,7 @@ StoreCode Store_page_write(Store *self, u32 pageId, u32 kind,
 StoreCode Store_page_release(Store *self, u32 pageId);
 StoreCode Store_page_read(Store *self, u32 pageId, u8 *dest, bytes capacity,
                           u32 *outLength, u32 *outKind, bool *outTruncated);
-StoreCode Store_sync(Store *self); // data sync only; never retires embedded redo
+StoreCode Store_sync(Store *self); /** data sync only; never retires embedded redo */
 
 bool Store_isOpen(const Store *self);
 bool Store_isBlocked(const Store *self);
@@ -81,13 +87,15 @@ u64 Store_exhaustionCount(const Store *self);
 fn Store_setCommitObserver(Store *self, StoreCommitObserver observer, any context);
 StoreCommitObserver Store_getCommitObserver(const Store *self);
 any Store_getObserverContext(const Store *self);
-const char *Store_codeName(StoreCode code);
-bool Store_toString(const Store *self, char *dest, bytes capacity, bool *outTruncated);
-bool Store_toStringStruct(const Store *self, char *dest, bytes capacity, bool *outTruncated);
+const utf8 *Store_codeName(StoreCode code);
+bool Store_toString(const Store *self, utf8 *dest, bytes capacity, bool *outTruncated);
+bool Store_toStringStruct(const Store *self, utf8 *dest, bytes capacity, bool *outTruncated);
 
-// Geometry, owner pointers, counts and sequence are lifecycle-derived, not raw
-// settable: the Conflict Triage Law + Single Class Per File Law (Java Law).
-// Embedded redo is retained, NOT recycled; when it fills new writes reject loudly.
-// No checkpoint compaction, catalog, index, row addressing, schema or Database
-// mutation adapter, hostile-writer sandbox, directory durability, or OS lock.
+/**
+ * Geometry, owner pointers, counts and sequence are lifecycle-derived, not raw
+ * settable: the Conflict Triage Law + Single Class Per File Law (Java Law).
+ * Embedded redo is retained, NOT recycled; when it fills new writes reject loudly.
+ * No checkpoint compaction, catalog, index, row addressing, schema or Database
+ * mutation adapter, hostile-writer sandbox, directory durability, or OS lock.
+ */
 #endif

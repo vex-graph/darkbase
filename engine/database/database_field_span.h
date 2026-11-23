@@ -4,23 +4,25 @@
 #include "vex.h"
 #include "database/database.h"
 
-// database/database_field_span.h — one field's resolved in-row byte span.
-//
-// The receipt a generic caller needs: given an entity and a field NAME, where
-// do that field's Bytes live inside a row, and how many are they? A caller that
-// has the C `struct` gets this from the compiler; a headless service, a tool or
-// any schema-driven consumer does not, so it asks here instead of walking the
-// reflection tree and folding names itself.
-//
-// This is a value record: it owns nothing, borrows nothing, and stays valid
-// independently of the Database. `code` is DATABASE_OK when the field resolved,
-// DATABASE_ABSENT for an unknown entity or field, and DATABASE_INVALID for a
-// null or malformed argument, an ambiguous folded name, or a span that would
-// leave the row — a span the caller could not safely read is never returned.
+/**
+ * database/database_field_span.h, one field's resolved in-row byte span.
+ *
+ * The receipt a generic caller needs: given an entity and a field NAME, where
+ * do that field's Bytes live inside a row, and how many are they? A caller that
+ * has the C `struct` gets this from the compiler; a headless service, a tool or
+ * any schema-driven consumer does not, so it asks here instead of walking the
+ * reflection tree and folding names itself.
+ *
+ * This is a value record: it owns nothing, borrows nothing, and stays valid
+ * independently of the Database. `code` is DATABASE_OK when the field resolved,
+ * DATABASE_ABSENT for an unknown entity or field, and DATABASE_INVALID for a
+ * null or malformed argument, an ambiguous folded name, or a span that would
+ * leave the row, a span the caller could not safely read is never returned.
+ */
 typedef struct DatabaseFieldSpan {
-    i32 code;   // DATABASE_OK, or the rejection code
-    u32 offset; // in-row byte offset of the field's span
-    u32 size;   // Bytes in the field's span
+    i32 code; /** DATABASE_OK, or the rejection code */
+    u32 offset; /** in-row byte offset of the field's span */
+    u32 size; /** Bytes in the field's span */
 } DatabaseFieldSpan;
 
 #endif
