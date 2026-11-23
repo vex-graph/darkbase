@@ -4,6 +4,7 @@
  */
 
 #include "vex.h"
+#include "re/primitive/vex-string.h"
 #include "engine/oop/darkbase_type.h"
 #include "database/database.h"
 #include "database/database_result.h"
@@ -64,14 +65,14 @@ static i32 s_database_result_g_checks = 0;
         s_database_result_g_checks++;                                                       \
         if (!(cond)) {                                                    \
             s_database_result_g_fail++;                                                     \
-            printf("  FAIL line %d: %s\n", __LINE__, #cond);              \
+            print("  FAIL line ", __LINE__, ": ", #cond);              \
         }                                                                 \
     } while (0)
 
 
 /** Verifies an empty cursor snapshots zero rows and handles null inputs safely. */
 static fn testEmptyCursor() {
-    printf("[1] empty cursor + null-safety\n");
+    print("[1] empty cursor + null-safety");
 
     DatabaseResult *r = DatabaseResult();
     CHECK(r != nullptr);
@@ -98,7 +99,7 @@ static fn testEmptyCursor() {
 
 /** Verifies cursor iteration, exhaustion, rewind, and borrowed row identity. */
 static fn testWalk() {
-    printf("[2] walk an entity's rows dest-last, rewind, no copies\n");
+    print("[2] walk an entity's rows dest-last, rewind, no copies");
 
     Database *db = Database();
     Struct *player = Struct("player");
@@ -151,7 +152,7 @@ static fn testWalk() {
 
 /** Verifies an owned result list is released without taking row-value ownership. */
 static fn testOwnedPointerList() {
-    printf("[3] owned match-list container, borrowed row values\n");
+    print("[3] owned match-list container, borrowed row values");
     ChunkedList *rows = ChunkedList_3(ID_DB_DATABASE_ROW,
         (u32) sizeof(any), 256u);
     Row2 row = {77u};
@@ -179,7 +180,7 @@ static fn testOwnedPointerList() {
 
 /** Verifies cursor string projections and bounded-buffer behavior. */
 static fn testStrings() {
-    printf("[4] string projections\n");
+    print("[4] string projections");
 
     DatabaseResult *r = DatabaseResult();
     CHECK(r != nullptr);
@@ -188,29 +189,29 @@ static fn testStrings() {
     utf8 buf[96];
     bool truncated = true;
     DatabaseResult_toString(r, buf, sizeof(buf), &truncated);
-    CHECK(truncated == false && strcmp(buf, "DatabaseResult(0/0)") == 0);
+    CHECK(truncated == false && string_equals(buf, "DatabaseResult(0/0)"));
 
     utf8 tiny[4];
     DatabaseResult_toString(r, tiny, sizeof(tiny), &truncated);
     CHECK(truncated == true);
 
     DatabaseResult_toString(nullptr, buf, sizeof(buf), &truncated);
-    CHECK(truncated == false && strcmp(buf, "nullptr") == 0);
+    CHECK(truncated == false && string_equals(buf, "nullptr"));
 
     DatabaseResult_free(r);
 }
 
 static i32 suite_database_result() {
-    printf("=== DatabaseResult Test Suite ===\n\n");
+    print("=== DatabaseResult Test Suite ===\n");
 
     testEmptyCursor();
     testWalk();
     testOwnedPointerList();
     testStrings();
 
-    printf("\n%d checks, %d failed\n", s_database_result_g_checks, s_database_result_g_fail);
+    print("\n", s_database_result_g_checks, " checks, ", s_database_result_g_fail, " failed");
     if (s_database_result_g_fail == 0)
-        printf("=== DatabaseResult Test Suite: ALL PASS ===\n");
+        print("=== DatabaseResult Test Suite: ALL PASS ===");
     return s_database_result_g_fail == 0 ? 0 : 1;
 }
 #undef CHECK
@@ -294,14 +295,14 @@ static fn crashAtDatabaseRoot(any context, u32 phase) {
         s_database_g_checks++;                                                       \
         if (!(cond)) {                                                    \
             s_database_g_fail++;                                                     \
-            printf("  FAIL line %d: %s\n", __LINE__, #cond);              \
+            print("  FAIL line ", __LINE__, ": ", #cond);              \
         }                                                                 \
     } while (0)
 
 
 /** Verifies database construction, type identity, null-safe access, and destruction. */
 static fn testConstructorAndNull() {
-    printf("[1] construction, identity, null-safety\n");
+    print("[1] construction, identity, null-safety");
 
     Database *db = Database();
     CHECK(db != nullptr);
@@ -327,12 +328,12 @@ static fn testConstructorAndNull() {
     utf8 buf[64];
     bool truncated = true;
     Database_toString(nullptr, buf, sizeof(buf), &truncated);
-    CHECK(truncated == false && strcmp(buf, "nullptr") == 0);
+    CHECK(truncated == false && string_equals(buf, "nullptr"));
 }
 
 /** Verifies entity registration, case-folded lookup, duplicate rejection, and cleanup. */
 static fn testDefineAndLookup() {
-    printf("[2] define entities, index/count/schema lookups\n");
+    print("[2] define entities, index/count/schema lookups");
 
     Database *db = Database();
     Struct *player = Struct("player");
@@ -368,7 +369,7 @@ static fn testDefineAndLookup() {
 
 /** Verifies borrowed row insertion, stable indexed reads, growth, and rejected inserts. */
 static fn testInsertAndRead() {
-    printf("[3] bind live rows, read them back, stable across growth\n");
+    print("[3] bind live rows, read them back, stable across growth");
 
     Database *db = Database();
     Struct *player = Struct("player");
@@ -409,7 +410,7 @@ static fn testInsertAndRead() {
 
 /** Verifies owned copy-in stride checks and the entity-wide ownership mode. */
 static fn testInsertOwned() {
-    printf("[4] owned row copy-in, exact stride, and per-entity ownership\n");
+    print("[4] owned row copy-in, exact stride, and per-entity ownership");
 
     Database *db = Database();
     Struct *player = Struct("player");
@@ -461,7 +462,7 @@ static fn testInsertOwned() {
 
 /** Verifies recorded database errors and bounded value/structure projections. */
 static fn testDiagnostics() {
-    printf("[4] recorded rejection is legible and bounded\n");
+    print("[4] recorded rejection is legible and bounded");
 
     Database *db = Database();
     CHECK(db != nullptr);
@@ -474,29 +475,29 @@ static fn testDiagnostics() {
     utf8 buf[128];
     i32 len = Database_lastError(db, buf, sizeof(buf));
     CHECK(len > 0 && (bytes) len == strlen(buf));
-    CHECK(strstr(buf, "define") != nullptr);
+    CHECK(string_contains(buf, "define"));
 
     utf8 tiny[4];
     i32 tinyLen = Database_lastError(db, tiny, sizeof(tiny));
     CHECK(tinyLen == 3 && tiny[3] == '\0');
 
-    CHECK(strcmp(Database_errorText(DATABASE_INVALID), "invalid argument") == 0);
-    CHECK(strcmp(Database_errorText(DATABASE_DUPLICATE), "duplicate entity") == 0);
-    CHECK(strcmp(Database_errorText(999), "unknown") == 0);
+    CHECK(string_equals(Database_errorText(DATABASE_INVALID), "invalid argument"));
+    CHECK(string_equals(Database_errorText(DATABASE_DUPLICATE), "duplicate entity"));
+    CHECK(string_equals(Database_errorText(999), "unknown"));
 
     utf8 proj[96];
     bool truncated = true;
     Database_toStringStruct(db, proj, sizeof(proj), &truncated);
-    CHECK(truncated == false && strstr(proj, "Database {") != nullptr);
+    CHECK(truncated == false && string_contains(proj, "Database {"));
 
     Database_free(db);
 }
 
 /** Verifies save/load round trips, loaded-row ownership, and corrupt-file rejection. */
 static fn testPersistence() {
-    printf("[5] .vexdb save/load round-trip, ownership, checksum, atomicity\n");
+    print("[5] .vexdb save/load round-trip, ownership, checksum, atomicity");
 
-    const utf8 *tmp = getenv("TMPDIR");
+    string tmp = getenv("TMPDIR");
     if (tmp == nullptr)
         tmp = "/tmp";
     utf8 path[256];
@@ -593,9 +594,9 @@ static fn testPersistence() {
 
 /** Verifies atomic save replacement and preservation of the previous file on rejection. */
 static fn testSafeSave() {
-    printf("[6] atomic save publication (temp write + fsync + rename)\n");
+    print("[6] atomic save publication (temp write + fsync + rename)");
 
-    const utf8 *tmp = getenv("TMPDIR");
+    string tmp = getenv("TMPDIR");
     if (tmp == nullptr)
         tmp = "/tmp";
     utf8 path[256];
@@ -671,8 +672,8 @@ static fn testSafeSave() {
 
 /** Verifies reflection rows publish through Store and load after a real reopen. */
 static fn testPageStorePersistence() {
-    printf("[7] page-store database persistence and reopen\n");
-    const utf8 *tmp = getenv("TMPDIR");
+    print("[7] page-store database persistence and reopen");
+    string tmp = getenv("TMPDIR");
     if (tmp == nullptr)
         tmp = "/tmp/";
     utf8 path[256];
@@ -766,7 +767,7 @@ static fn testPageStorePersistence() {
         DatabaseCatalogEntry catalogEntry = Database_storeCatalogEntry(store, 0u);
         retainedEntry = catalogEntry;
         CHECK(catalogEntry.code == DATABASE_OK && catalogEntry.found);
-        CHECK(strcmp(catalogEntry.name, "player") == 0 &&
+        CHECK(string_equals(catalogEntry.name, "player") &&
               catalogEntry.rowStride == sizeof(Row) && catalogEntry.rowCount == 3u);
         DatabaseCatalogEntry absentEntry = Database_storeCatalogEntry(store, 1u);
         CHECK(absentEntry.code == DATABASE_ABSENT && !absentEntry.found);
@@ -791,15 +792,15 @@ static fn testPageStorePersistence() {
     }
     Store_free(store);
     CHECK(retainedEntry.code == DATABASE_OK && retainedEntry.found &&
-          strcmp(retainedEntry.name, "player") == 0 &&
+          string_equals(retainedEntry.name, "player") &&
           retainedEntry.rowStride == sizeof(Row) && retainedEntry.rowCount == 3u);
     remove(path);
 }
 
 /** Proves the public Database image is recovered from a torn root-page commit. */
 static fn testPageStoreRecovery() {
-    printf("[8] page-store database root recovery after process exit\n");
-    const utf8 *tmp = getenv("TMPDIR");
+    print("[8] page-store database root recovery after process exit");
+    string tmp = getenv("TMPDIR");
     if (tmp == nullptr)
         tmp = "/tmp/";
     utf8 path[256];
@@ -860,7 +861,7 @@ static fn testPageStoreRecovery() {
 
 /** Verifies structured equality uses reflected byte spans and returns matching rows. */
 static fn testStructuredEqualityQuery() {
-    printf("[9] reflected raw-byte equality query and cursor\n");
+    print("[9] reflected raw-byte equality query and cursor");
     Database *db = Database();
     Struct *schema = Struct("player");
     Field *idField = Field("id");
@@ -1019,8 +1020,8 @@ static fn testStructuredEqualityQuery() {
 
 /** Verifies the declared int32 index survives a save/reopen through the Store. */
 static fn testPersistedIndex() {
-    printf("[10] persisted int32 index roundtrip and schema drift\n");
-    const utf8 *tmp = getenv("TMPDIR");
+    print("[10] persisted int32 index roundtrip and schema drift");
+    string tmp = getenv("TMPDIR");
     if (tmp == nullptr)
         tmp = "/tmp/";
     utf8 path[256];
@@ -1142,7 +1143,7 @@ static fn testPersistedIndex() {
 }
 
 static i32 suite_database() {
-    printf("=== Database Test Suite ===\n\n");
+    print("=== Database Test Suite ===\n");
 
     testConstructorAndNull();
     testDefineAndLookup();
@@ -1156,9 +1157,9 @@ static i32 suite_database() {
     testStructuredEqualityQuery();
     testPersistedIndex();
 
-    printf("\n%d checks, %d failed\n", s_database_g_checks, s_database_g_fail);
+    print("\n", s_database_g_checks, " checks, ", s_database_g_fail, " failed");
     if (s_database_g_fail == 0)
-        printf("=== Database Test Suite: ALL PASS ===\n");
+        print("=== Database Test Suite: ALL PASS ===");
     return s_database_g_fail == 0 ? 0 : 1;
 }
 #undef CHECK
@@ -1203,7 +1204,7 @@ static inline fn Page_setSize(Page *page, u32 size)
     (*page).size = size;
 }
 
-static fn checkAdmission(Page *page, PageCode expected, const utf8 *message) {
+static fn checkAdmission(Page *page, PageCode expected, string message) {
     Page before;
     u8 bytesBefore[SIZE];
     if (page != nullptr) {
@@ -1233,8 +1234,8 @@ static fn checkAdmission(Page *page, PageCode expected, const utf8 *message) {
         for (bytes i = 0u; i < length; ++i)
             if (output[i] == '\n')
                 ++lines;
-        assert(lines == 2u && strstr(output, "[vex] ") != nullptr);
-        assert(strstr(output, message) != nullptr);
+        assert(lines == 2u && string_contains(output, "[vex] "));
+        assert(string_contains(output, message));
         if (page != nullptr)
             assert(memcmp(page, &before, sizeof before) == 0);
     }
@@ -1272,9 +1273,9 @@ static fn restoredAdmission() {
             utf8 text[256];
             bool truncated = true;
             assert(Page_toStringStruct(reader, text, sizeof text, &truncated));
-            assert(!truncated && strstr(text, "id=91") != nullptr);
-            assert(strstr(text, "sealed=1, dirty=0") != nullptr);
-            assert(strstr(text, "lastCode=ok") != nullptr && strstr(text, "bytes=") != nullptr);
+            assert(!truncated && string_contains(text, "id=91"));
+            assert(string_contains(text, "sealed=1, dirty=0"));
+            assert(string_contains(text, "lastCode=ok") && string_contains(text, "bytes="));
             checkAdmission(reader, PAGE_OK, nullptr);
             Page_free(reader);
         }
@@ -1290,7 +1291,7 @@ static fn restoredAdmission() {
     assert(Page_seal(writer) == PAGE_OK);
     u8 valid[SIZE];
     memcpy(valid, storage, sizeof valid);
-    const struct { bytes offset; PageCode code; const utf8 *message; } cases[] = {
+    const struct { bytes offset; PageCode code; string message; } cases[] = {
         {0u, PAGE_INVALID, "magic"},
         {4u, PAGE_BAD_SEAL, "seal"},
         {8u, PAGE_INVALID, "kind"},
@@ -1405,7 +1406,7 @@ static i32 suite_page() {
     assert(Page_seal(page) == PAGE_OK);
     assert(Page_verify(page) == PAGE_OK);
 
-    struct { const utf8 *what; bytes offset; } cases[] = {
+    struct { string what; bytes offset; } cases[] = {
         { "a flipped payload byte", PAGE_HEADER_BYTES + 3u },
         { "the page id",            4u },
         { "the used length",        12u },
@@ -1444,35 +1445,35 @@ static i32 suite_page() {
     assert(Page_verify(foreign) == PAGE_INVALID);
     Page_free(foreign);
 
-    assert(strcmp(Page_codeName(PAGE_OK), "ok") == 0);
-    assert(strcmp(Page_codeName(PAGE_INVALID), "invalid") == 0);
-    assert(strcmp(Page_codeName(PAGE_BAD_SEAL), "bad-seal") == 0);
-    assert(strcmp(Page_codeName(PAGE_FULL), "full") == 0);
-    assert(strcmp(Page_codeName(PAGE_NOT_SEALED), "not-sealed") == 0);
-    assert(strcmp(Page_codeName(PAGE_SEALED), "sealed") == 0);
-    assert(strcmp(Page_codeName((PageCode) 99), "unknown") == 0);
-    assert(strcmp(Page_kindName(PAGE_KIND_FREE), "free") == 0);
-    assert(strcmp(Page_kindName(PAGE_KIND_LEAF), "leaf") == 0);
-    assert(strcmp(Page_kindName(PAGE_KIND_BRANCH), "branch") == 0);
-    assert(strcmp(Page_kindName(PAGE_KIND_OVERFLOW), "overflow") == 0);
-    assert(strcmp(Page_kindName(PAGE_KIND_CATALOG), "catalog") == 0);
-    assert(strcmp(Page_kindName(77u), "unknown") == 0);
+    assert(string_equals(Page_codeName(PAGE_OK), "ok"));
+    assert(string_equals(Page_codeName(PAGE_INVALID), "invalid"));
+    assert(string_equals(Page_codeName(PAGE_BAD_SEAL), "bad-seal"));
+    assert(string_equals(Page_codeName(PAGE_FULL), "full"));
+    assert(string_equals(Page_codeName(PAGE_NOT_SEALED), "not-sealed"));
+    assert(string_equals(Page_codeName(PAGE_SEALED), "sealed"));
+    assert(string_equals(Page_codeName((PageCode) 99), "unknown"));
+    assert(string_equals(Page_kindName(PAGE_KIND_FREE), "free"));
+    assert(string_equals(Page_kindName(PAGE_KIND_LEAF), "leaf"));
+    assert(string_equals(Page_kindName(PAGE_KIND_BRANCH), "branch"));
+    assert(string_equals(Page_kindName(PAGE_KIND_OVERFLOW), "overflow"));
+    assert(string_equals(Page_kindName(PAGE_KIND_CATALOG), "catalog"));
+    assert(string_equals(Page_kindName(77u), "unknown"));
     assert(Page_format(page, 1u, 99u) == PAGE_INVALID);
     assert(Page_codeName(Page_code(page)) != nullptr);
 
     utf8 text[256];
     bool truncated = true;
     assert(Page_toString(page, text, sizeof text, &truncated));
-    assert(!truncated && strstr(text, "Page(id=") != nullptr);
+    assert(!truncated && string_contains(text, "Page(id="));
     assert(Page_toStringStruct(page, text, sizeof text, &truncated));
-    assert(strstr(text, "seal=") != nullptr && strstr(text, "kind=") != nullptr);
+    assert(string_contains(text, "seal=") && string_contains(text, "kind="));
     utf8 tiny[4];
     truncated = false;
     assert(!Page_toString(page, tiny, sizeof tiny, &truncated));
     assert(truncated);
     assert(!Page_toStringStruct(page, nullptr, 0u, nullptr));
     assert(Page_toString(nullptr, text, sizeof text, nullptr));
-    assert(strcmp(text, "nullptr") == 0);
+    assert(string_equals(text, "nullptr"));
 
     assert(Page_id(nullptr) == 0u && Page_kind(nullptr) == 0u && Page_size(nullptr) == 0u);
     assert(Page_payload(nullptr) == nullptr && Page_payloadOf(nullptr) == nullptr);
@@ -1487,7 +1488,7 @@ static i32 suite_page() {
     assert(!Page_isDirty(page));
 
     Page_free(page);
-    printf("page_test: PASS\n");
+    print("page_test: PASS");
     return 0;
 }
 #undef SIZE
@@ -1596,7 +1597,7 @@ static fn resetSeen()
 }
 
 static fn makePath() {
-    const utf8 *dir = getenv("TMPDIR");
+    string dir = getenv("TMPDIR");
     (discard) snprintf(path, sizeof path, "%s/re-wal-%d.log", dir != nullptr ? dir : "/tmp", (i32) getpid());
     (discard) unlink(path);
 }
@@ -1697,8 +1698,8 @@ static fn regionCases() {
     utf8 diagnostic[512];
     bytes used = fread(diagnostic, 1u, sizeof diagnostic - 1u, errors);
     diagnostic[used] = '\0';
-    assert(strstr(diagnostic, "region exhausted, request") != nullptr);
-    utf8 *line = strchr(diagnostic, '\n');
+    assert(string_contains(diagnostic, "region exhausted, request"));
+    utf8 *line = (utf8*) string_find(diagnostic, (utf8[]){ (utf8) ('\n'), '\0' });
     assert(line != nullptr && line[1] == '\0');
     assert(fclose(errors) == 0);
     assert(Wal_exhaustionCount(log) == 2u && seq == 99u);
@@ -1840,19 +1841,19 @@ static i32 suite_wal() {
     assert(!Wal_isOpen(nullptr) && Wal_sequence(nullptr) == 0u);
     Wal_free(nullptr);
 
-    assert(strcmp(Wal_codeName(WAL_OK), "ok") == 0);
-    assert(strcmp(Wal_codeName(WAL_INVALID), "invalid") == 0);
-    assert(strcmp(Wal_codeName(WAL_IO), "io") == 0);
-    assert(strcmp(Wal_codeName(WAL_CORRUPT), "corrupt") == 0);
-    assert(strcmp(Wal_codeName(WAL_TRUNCATED), "truncated") == 0);
-    assert(strcmp(Wal_codeName(WAL_CLOSED), "closed") == 0);
-    assert(strcmp(Wal_codeName((WalCode) 77), "unknown") == 0);
+    assert(string_equals(Wal_codeName(WAL_OK), "ok"));
+    assert(string_equals(Wal_codeName(WAL_INVALID), "invalid"));
+    assert(string_equals(Wal_codeName(WAL_IO), "io"));
+    assert(string_equals(Wal_codeName(WAL_CORRUPT), "corrupt"));
+    assert(string_equals(Wal_codeName(WAL_TRUNCATED), "truncated"));
+    assert(string_equals(Wal_codeName(WAL_CLOSED), "closed"));
+    assert(string_equals(Wal_codeName((WalCode) 77), "unknown"));
 
     makePath();
     Wal *log = Wal_1(path);
     assert(log != nullptr && Wal_isOpen(log));
     assert(Wal_code(log) == WAL_OK);
-    assert(strcmp(Wal_path(log), path) == 0);
+    assert(string_equals(Wal_path(log), path));
     assert(Wal_sequence(log) == 0u && Wal_count(log) == 0u);
     assert(fileSize() == (i64) WAL_HEADER_BYTES);
 
@@ -1969,11 +1970,11 @@ static i32 suite_wal() {
     utf8 text[96];
     bool truncated = true;
     assert(Wal_toString(final, text, sizeof text, &truncated));
-    assert(!truncated && strstr(text, "Wal(") != nullptr);
+    assert(!truncated && string_contains(text, "Wal("));
     utf8 structText[1024];
     assert(Wal_toStringStruct(final, structText, sizeof structText, &truncated));
-    assert(!truncated && strstr(structText, "path=") != nullptr);
-    assert(strstr(structText, "baseSequence=") != nullptr && strstr(structText, "tailTorn=") != nullptr);
+    assert(!truncated && string_contains(structText, "path="));
+    assert(string_contains(structText, "baseSequence=") && string_contains(structText, "tailTorn="));
     utf8 tinyText[6];
     truncated = false;
     assert(!Wal_toString(final, tinyText, sizeof tinyText, &truncated));
@@ -1984,7 +1985,7 @@ static i32 suite_wal() {
 
     regionCases();
     Memory_freeAll();
-    printf("wal_test: PASS\n");
+    print("wal_test: PASS");
     return 0;
 }
 #undef RECORDS
@@ -2031,9 +2032,9 @@ static bytes captureProbe(ModifierProbe probe, utf8 *out, bytes cap) {
     return n;
 }
 
-static bytes lineCount(const utf8 *text) {
+static bytes lineCount(string text) {
     bytes lines = 0u;
-    for (const utf8 *p = text; *p != '\0'; ++p)
+    for (string p = text; *p != '\0'; ++p)
         if (*p == '\n')
             ++lines;
     return lines;
@@ -2062,13 +2063,13 @@ static Modifier probeQuiet()
     return Modifier_parse("public hashed nullable");
 }
 
-static fn checkReject(ModifierProbe probe, ModifierCode expected, const utf8 *fragment) {
+static fn checkReject(ModifierProbe probe, ModifierCode expected, string fragment) {
     utf8 text[512];
     bytes n = captureProbe(probe, text, sizeof text);
     assert(n > 0u);
     assert(lineCount(text) == 1u);
-    assert(strncmp(text, "[vex] ", 6u) == 0);
-    assert(strstr(text, fragment) != nullptr);
+    assert(string_startsWith(text, "[vex] ", 6u));
+    assert(string_contains(text, fragment));
     (discard) expected;
 }
 
@@ -2138,13 +2139,12 @@ static i32 suite_modifier() {
            (u32) MODIFIER_WARNING_LOSSY);
     assert(Modifier_warnings(def) == MODIFIER_WARNING_NONE);
 
-    assert(strcmp(Modifier_accessName(MODIFIER_ACCESS_PUBLIC), "public") == 0);
-    assert(strcmp(Modifier_protectionName(MODIFIER_PROTECTION_CLIENT_SEALED),
-                  "client-sealed") == 0);
-    assert(strcmp(Modifier_nullabilityName(MODIFIER_NONNULL), "nonnull") == 0);
-    assert(strcmp(Modifier_codeName(MODIFIER_DUPLICATE), "DUPLICATE") == 0);
-    assert(strcmp(Modifier_warningName(MODIFIER_WARNING_LOSSY), "lossy") == 0);
-    assert(strcmp(Modifier_accessName((ModifierAccess) 9), "unknown") == 0);
+    assert(string_equals(Modifier_accessName(MODIFIER_ACCESS_PUBLIC), "public"));
+    assert(string_equals(Modifier_protectionName(MODIFIER_PROTECTION_CLIENT_SEALED), "client-sealed"));
+    assert(string_equals(Modifier_nullabilityName(MODIFIER_NONNULL), "nonnull"));
+    assert(string_equals(Modifier_codeName(MODIFIER_DUPLICATE), "DUPLICATE"));
+    assert(string_equals(Modifier_warningName(MODIFIER_WARNING_LOSSY), "lossy"));
+    assert(string_equals(Modifier_accessName((ModifierAccess) 9), "unknown"));
 
     assert(Modifier_equals(Modifier_parse(""), def));
     assert(Modifier_equals(Modifier_parse("   \t\r\n "), def));
@@ -2172,24 +2172,24 @@ static i32 suite_modifier() {
     utf8 text[256];
     bool cut = true;
     assert(Modifier_toString(three, text, sizeof text, &cut) && !cut);
-    assert(strcmp(text, "public:hashed:nullable") == 0);
+    assert(string_equals(text, "public:hashed:nullable"));
     assert(Modifier_toString(five, text, sizeof text, &cut) && !cut);
-    assert(strcmp(text, "public:server-sealed:nonnull:transient:static") == 0);
+    assert(string_equals(text, "public:server-sealed:nonnull:transient:static"));
     assert(Modifier_toString(def, text, sizeof text, &cut) && !cut);
-    assert(strcmp(text, "private:plain:nullable") == 0);
+    assert(string_equals(text, "private:plain:nullable"));
     assert(!Modifier_toString(five, text, 5u, &cut) && cut);
     assert(!Modifier_toString(five, nullptr, 0u, &cut) && cut);
 
     assert(Modifier_toStringStruct(five, text, sizeof text, &cut) && !cut);
-    assert(strstr(text, "access=public") != nullptr);
-    assert(strstr(text, "protection=server-sealed") != nullptr);
-    assert(strstr(text, "nullability=nonnull") != nullptr);
-    assert(strstr(text, "transient=1") != nullptr);
-    assert(strstr(text, "shared=1") != nullptr);
-    assert(strstr(text, "lastCode=OK") != nullptr);
+    assert(string_contains(text, "access=public"));
+    assert(string_contains(text, "protection=server-sealed"));
+    assert(string_contains(text, "nullability=nonnull"));
+    assert(string_contains(text, "transient=1"));
+    assert(string_contains(text, "shared=1"));
+    assert(string_contains(text, "lastCode=OK"));
     assert(!Modifier_toStringStruct(five, text, 4u, &cut) && cut);
 
-    printf("modifier_test: OK\n");
+    print("modifier_test: OK");
     return 0;
 }
 
@@ -2402,11 +2402,11 @@ static fn defaults() {
     REFUSES(HeadlessProtocol_encode(1u, 1u, 0u, 1u, nullptr, 0u, backing, sizeof backing, &length, nullptr));
     utf8 text[256];
     assert(HeadlessProtocol_toString(nullptr, text, sizeof text, &truncated));
-    assert(!truncated && strcmp(text, "nullptr") == 0);
+    assert(!truncated && string_equals(text, "nullptr"));
     assert(HeadlessProtocol_toStringStruct(nullptr, text, sizeof text, &truncated));
     assert(HeadlessProtocol_toString(&protocol, text, sizeof text, &truncated));
     assert(HeadlessProtocol_toStringStruct(&protocol, text, sizeof text, &truncated));
-    assert(strstr(text, "buffer:<redacted>") != nullptr);
+    assert(string_contains(text, "buffer:<redacted>"));
     assert(!HeadlessProtocol_toStringStruct(&protocol, text, 1u, &truncated));
     assert(truncated && text[0] == '\0');
     assert(!HeadlessProtocol_toString(&protocol, nullptr, 0u, &truncated));
@@ -2431,15 +2431,15 @@ static i32 suite_headless_protocol() {
     utf8 line[512];
     bool sawCapacity = false, sawVersion = false;
     while (fgets(line, sizeof line, capture) != nullptr) {
-        assert(strstr(line, "[vex] ") == line);
-        assert(strstr(line, "secret") == nullptr);
-        sawCapacity |= strstr(line, "frame request 17 exceeds backing bound 16") != nullptr;
-        sawVersion |= strstr(line, "rejected code 4") != nullptr;
+        assert(string_find(line, "[vex] ") == line);
+        assert(!string_contains(line, "secret"));
+        sawCapacity |= string_contains(line, "frame request 17 exceeds backing bound 16");
+        sawVersion |= string_contains(line, "rejected code 4");
         ++count;
     }
     fclose(capture);
     assert(count == diagnostics && sawCapacity && sawVersion);
-    printf("HeadlessProtocol: all split/boundary/negative/recovery checks passed; %u expected diagnostics\n", count);
+    print("HeadlessProtocol: all split/boundary/negative/recovery checks passed; ", count, " expected diagnostics");
     return 0;
 }
 #undef REFUSES
@@ -2469,7 +2469,7 @@ static u32 failures;
     checks++; \
     if (!(value)) { \
         failures++; \
-        fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #value); \
+        fprint(stderr, "FAIL line ", __LINE__, ": ", #value); \
     } \
 } while (false)
 
@@ -2494,8 +2494,8 @@ static inline fn TestSecretContext_setPresent(TestSecretContext *c, bool present
     (*c).present = present;
 }
 
-static bool secretStore(any opaqueContext, const utf8 *service,
-                        const utf8 *account, const u8 *secret, bytes length) {
+static bool secretStore(any opaqueContext, string service,
+                        string account, const u8 *secret, bytes length) {
     TestSecretContext *context = (TestSecretContext*) opaqueContext;
     if (context == nullptr || service == nullptr || account == nullptr || secret == nullptr ||
         length != sizeof(((TestSecretContext) {0}).secret))
@@ -2505,8 +2505,8 @@ static bool secretStore(any opaqueContext, const utf8 *service,
     return true;
 }
 
-static bool secretLoad(any opaqueContext, const utf8 *service,
-                       const utf8 *account, u8 *dest, bytes capacity,
+static bool secretLoad(any opaqueContext, string service,
+                       string account, u8 *dest, bytes capacity,
                        bytes *outLength) {
     TestSecretContext *context = (TestSecretContext*) opaqueContext;
     if (outLength != nullptr)
@@ -2520,8 +2520,8 @@ static bool secretLoad(any opaqueContext, const utf8 *service,
     return true;
 }
 
-static bool secretRemove(any opaqueContext, const utf8 *service,
-                         const utf8 *account) {
+static bool secretRemove(any opaqueContext, string service,
+                         string account) {
     TestSecretContext *context = (TestSecretContext*) opaqueContext;
     if (context == nullptr || service == nullptr || account == nullptr)
         return false;
@@ -2547,12 +2547,12 @@ static i32 suite_service() {
         utf8 projection[256];
         bool truncated = true;
         CHECK(HeadlessService_toString(nullptr, projection, sizeof projection, &truncated));
-        CHECK(!truncated && strcmp(projection, "nullptr") == 0);
+        CHECK(!truncated && string_equals(projection, "nullptr"));
         CHECK(HeadlessService_toString(emptyService, projection, sizeof projection, &truncated));
-        CHECK(!truncated && strstr(projection, "HeadlessService{closed}") != nullptr);
+        CHECK(!truncated && string_contains(projection, "HeadlessService{closed}"));
         CHECK(HeadlessService_toStringStruct(emptyService, projection, sizeof projection,
                                              &truncated));
-        CHECK(!truncated && strstr(projection, "passwordIterations:") != nullptr);
+        CHECK(!truncated && string_contains(projection, "passwordIterations:"));
         CHECK(!HeadlessService_toString(emptyService, projection, 1u, &truncated));
         CHECK(truncated);
         HeadlessService_free(emptyService);
@@ -2643,7 +2643,7 @@ static i32 suite_service() {
     memset(&secrets, 0, sizeof secrets);
     unlink(databasePath);
     rmdir(directory);
-    printf("HeadlessService: %u checks, %u failures\n", checks, failures);
+    print("HeadlessService: ", checks, " checks, ", failures, " failures");
     return failures == 0u ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 #undef CHECK
@@ -2682,7 +2682,7 @@ static fn s_store_adversarial_fixture(utf8 path[1024]) {
     assert(n > 0 && n < 1024);
 }
 
-static fn writeAt(const utf8 *path, i64 offset, const_any data, bytes length) {
+static fn writeAt(string path, i64 offset, const_any data, bytes length) {
     FILE *file = fopen(path, "r+b.sh");
     assert(file != nullptr);
     assert(fseek(file, offset, SEEK_SET) == 0);
@@ -2691,7 +2691,7 @@ static fn writeAt(const utf8 *path, i64 offset, const_any data, bytes length) {
     assert(fclose(file) == 0);
 }
 
-static fn readAt(const utf8 *path, i64 offset, any data, bytes length) {
+static fn readAt(string path, i64 offset, any data, bytes length) {
     FILE *file = fopen(path, "rb");
     assert(file != nullptr);
     assert(fseek(file, offset, SEEK_SET) == 0);
@@ -2699,7 +2699,7 @@ static fn readAt(const utf8 *path, i64 offset, any data, bytes length) {
     assert(fclose(file) == 0);
 }
 
-static Store *create(const utf8 *path) {
+static Store *create(string path) {
     Store *store = Store_4(path, TEST_RESERVATION, TEST_PAGE, TEST_JOURNAL);
     assert(store != nullptr && Store_isOpen(store));
     return store;
@@ -2843,7 +2843,7 @@ static fn malformedBootstrapAdmission() {
 }
 
 static i32 suite_store_adversarial() {
-    const utf8 *tmp = getenv("TMPDIR");
+    string tmp = getenv("TMPDIR");
     i32 n = snprintf(s_store_adversarial_directory, sizeof s_store_adversarial_directory, "%s/store-adversarial-XXXXXX",
                      tmp != nullptr ? tmp : "/tmp");
     assert(n > 0 && (bytes) n < sizeof s_store_adversarial_directory && mkdtemp(s_store_adversarial_directory) != nullptr);
@@ -2986,9 +2986,9 @@ static fn lifecycle() {
     assert(Store_sync(store) == STORE_OK);
     utf8 text[768];
     assert(Store_toString(store, text, sizeof text, &cut) && !cut);
-    assert(strstr(text, "Store(open=1") != nullptr);
+    assert(string_contains(text, "Store(open=1"));
     assert(Store_toStringStruct(store, text, sizeof text, &cut) && !cut);
-    assert(strstr(text, "mapping=") != nullptr && strstr(text, "observerContext=redacted") != nullptr);
+    assert(string_contains(text, "mapping=") && string_contains(text, "observerContext=redacted"));
     assert(!Store_toString(store, text, 2u, &cut) && cut && text[1] == '\0');
     assert(!Store_toStringStruct(store, nullptr, 0u, &cut) && cut);
     sequence = Store_sequence(store);
@@ -3119,11 +3119,11 @@ static fn invalidAdmission() {
     assert(Store_getCommitObserver(nullptr) == nullptr && Store_getObserverContext(nullptr) == nullptr);
     utf8 text[64];
     bool cut = true;
-    assert(Store_toString(nullptr, text, sizeof text, &cut) && !cut && strcmp(text, "nullptr") == 0);
-    assert(Store_toStringStruct(nullptr, text, sizeof text, &cut) && strcmp(text, "nullptr") == 0);
+    assert(Store_toString(nullptr, text, sizeof text, &cut) && !cut && string_equals(text, "nullptr"));
+    assert(Store_toStringStruct(nullptr, text, sizeof text, &cut) && string_equals(text, "nullptr"));
     for (i32 i = STORE_OK; i <= STORE_TRUNCATED; ++i)
-        assert(strcmp(Store_codeName((StoreCode) i), "unknown") != 0);
-    assert(strcmp(Store_codeName((StoreCode) 99), "unknown") == 0);
+        assert(!string_equals(Store_codeName((StoreCode) i), "unknown"));
+    assert(string_equals(Store_codeName((StoreCode) 99), "unknown"));
     s_store_fixture(path);
     Store *store = Store_4(path, TEST_RESERVATION, TEST_PAGE, TEST_JOURNAL);
     assert(store != nullptr);
@@ -3196,9 +3196,9 @@ static fn uncertainIO() {
 #endif
 
 static i32 suite_store(i32 argc, utf8 **argv) {
-    bool leakSafe = argc == 2 && strcmp(argv[1], "--leak-safe") == 0;
+    bool leakSafe = argc == 2 && string_equals(argv[1], "--leak-safe");
     assert(argc == 1 || leakSafe);
-    const utf8 *tmp = getenv("TMPDIR");
+    string tmp = getenv("TMPDIR");
     i32 n = snprintf(s_store_directory, sizeof s_store_directory, "%s/store-owner-XXXXXX", tmp != nullptr ? tmp : "/tmp");
     assert(n > 0 && (bytes) n < sizeof s_store_directory && mkdtemp(s_store_directory) != nullptr);
     invalidAdmission();
@@ -3244,12 +3244,12 @@ i32 main(i32 argc, utf8 **argv) {
         { "store_adversarial", suite_store_adversarial },
         { "store", suite_store_entry },
     };
-    const utf8 *filter = argc > 1 ? argv[1] : nullptr;
+    string filter = argc > 1 ? argv[1] : nullptr;
     bytes ran = 0;
     i32 failed = 0;
 
     for (bytes i = 0; i < sizeof(suites) / sizeof(suites[0]); i++) {
-        if (filter && strcmp(filter, suites[i].name) != 0)
+        if (filter && !string_equals(filter, suites[i].name))
             continue;
         if (suites[i].run() != 0)
             failed++;
@@ -3257,11 +3257,11 @@ i32 main(i32 argc, utf8 **argv) {
     }
 
     if (filter && ran == 0) {
-        fprintf(stderr, "darkbase_test: unknown suite '%s'\n", filter);
+        fprint(stderr, "darkbase_test: unknown suite '", filter, "'");
         return 2;
     }
     if (failed != 0) {
-        fprintf(stderr, "darkbase_test: %d suite(s) FAILED\n", failed);
+        fprint(stderr, "darkbase_test: ", failed, " suite(s) FAILED");
         return 1;
     }
     puts("darkbase_test: PASS");

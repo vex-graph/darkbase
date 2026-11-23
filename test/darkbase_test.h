@@ -9,7 +9,7 @@
  * run: suite entrypoint returning 0 on pass or non-zero on failure.
  */
 typedef struct SuiteEntry {
-    const utf8 *name;
+    string name;
     i32 (*run)();
 } SuiteEntry;
 
