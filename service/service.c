@@ -13,14 +13,14 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "re/primitive/char_sequence.h"
+#include "nio/darkbase_memory.h"
 
 #define HEADLESS_ADMIN_NAME "admin"
 #define HEADLESS_ADMIN_PASSWORD "Password123!"
 #define HEADLESS_ADMIN_SERVICE "vexgraph.darkbase.headless"
 #define HEADLESS_ADMIN_ACCOUNT "admin"
 #define HEADLESS_ADMIN_SECRET_BYTES 20u
-#define HEADLESS_PASSWORD_BYTES 32u
-#define HEADLESS_SALT_BYTES 16u
 
 ;;DEFINITION
 /** HeadlessService is the R4 lifetime and admission owner for the R3 Database.
@@ -39,7 +39,7 @@
  * STRUCT FIELDS (Mirroring service/service.c)
  *   Database *database            service-owned R3 store
  *   Struct *adminSchema           service-owned schema, kept alive through DB free
- *   char databasePath[1024]       private file path copied at construction
+ *   utf8 databasePath[1024]       private file path copied at construction
  *   HeadlessSecretStoreFn store   borrowed secure-secret write callback
  *   HeadlessSecretLoadFn load     borrowed secure-secret read callback
  *   HeadlessSecretRemoveFn remove borrowed secure-secret delete callback
@@ -72,19 +72,11 @@
  * closed on every process start. Passwords and TOTP secrets never appear in
  * projections or diagnostics. ======================================================================== */
 
-typedef struct HeadlessAdminRecord {
-    u8 passwordSalt[HEADLESS_SALT_BYTES]; // PBKDF2 salt
-    u8 passwordHash[HEADLESS_PASSWORD_BYTES]; // PBKDF2-SHA256 result
-    u32 iterations; // derivation cost recorded with the hash
-    u32 passwordChangeRequired; // one-time bootstrap barrier
-    u32 acceptRequestsPreference; // durable explicit enable preference
-    u64 lastTotpStep; // durable replay rejection watermark
-} HeadlessAdminRecord;
 
 struct HeadlessService {
     Database *database;
     Struct *adminSchema;
-    char databasePath[FILE_PATH_MAX];
+    utf8 databasePath[FILE_PATH_MAX];
     HeadlessSecretStoreFn store;
     HeadlessSecretLoadFn load;
     HeadlessSecretRemoveFn remove;
@@ -97,11 +89,20 @@ struct HeadlessService {
 };
 
 ;;GETTER
-static inline const u8 *HeadlessAdminRecord_passwordSalt(const HeadlessAdminRecord *r) { return (*r).passwordSalt; }
+static inline const u8 *HeadlessAdminRecord_passwordSalt(const HeadlessAdminRecord *r)
+{
+    return (*r).passwordSalt;
+}
 ;;GETTER
-static inline const u8 *HeadlessAdminRecord_passwordHash(const HeadlessAdminRecord *r) { return (*r).passwordHash; }
+static inline const u8 *HeadlessAdminRecord_passwordHash(const HeadlessAdminRecord *r)
+{
+    return (*r).passwordHash;
+}
 ;;GETTER
-static inline u32 HeadlessAdminRecord_iterations(const HeadlessAdminRecord *r) { return (*r).iterations; }
+static inline u32 HeadlessAdminRecord_iterations(const HeadlessAdminRecord *r)
+{
+    return (*r).iterations;
+}
 ;;GETTER
 static inline u32 HeadlessAdminRecord_passwordChangeRequired(const HeadlessAdminRecord *r) {
     return (*r).passwordChangeRequired;
@@ -111,39 +112,90 @@ static inline u32 HeadlessAdminRecord_acceptRequestsPreference(const HeadlessAdm
     return (*r).acceptRequestsPreference;
 }
 ;;GETTER
-static inline u64 HeadlessAdminRecord_lastTotpStep(const HeadlessAdminRecord *r) { return (*r).lastTotpStep; }
+static inline u64 HeadlessAdminRecord_lastTotpStep(const HeadlessAdminRecord *r)
+{
+    return (*r).lastTotpStep;
+}
 ;;GETTER
-static inline Database *HeadlessService_database(const HeadlessService *self) { return (*self).database; }
+static inline Database *HeadlessService_database(const HeadlessService *self)
+{
+    return (*self).database;
+}
 ;;SETTER
-static inline fn HeadlessService_setDatabase(HeadlessService *self, Database *db) { (*self).database = db; }
+static inline fn HeadlessService_setDatabase(HeadlessService *self, Database *db)
+{
+    (*self).database = db;
+}
 ;;GETTER
-static inline Struct *HeadlessService_adminSchema(const HeadlessService *self) { return (*self).adminSchema; }
+static inline Struct *HeadlessService_adminSchema(const HeadlessService *self)
+{
+    return (*self).adminSchema;
+}
 ;;SETTER
-static inline fn HeadlessService_setAdminSchema(HeadlessService *self, Struct *s) { (*self).adminSchema = s; }
+static inline fn HeadlessService_setAdminSchema(HeadlessService *self, Struct *s)
+{
+    (*self).adminSchema = s;
+}
 ;;GETTER
-static inline const char *HeadlessService_databasePath(const HeadlessService *self) { return (*self).databasePath; }
+static inline const utf8 *HeadlessService_databasePath(const HeadlessService *self)
+{
+    return (*self).databasePath;
+}
 ;;GETTER
-static inline char *HeadlessService_databasePathMut(HeadlessService *self) { return (*self).databasePath; }
+static inline utf8 *HeadlessService_databasePathMut(HeadlessService *self)
+{
+    return (*self).databasePath;
+}
 ;;GETTER
-static inline HeadlessSecretStoreFn HeadlessService_store(const HeadlessService *self) { return (*self).store; }
+static inline HeadlessSecretStoreFn HeadlessService_store(const HeadlessService *self)
+{
+    return (*self).store;
+}
 ;;SETTER
-static inline fn HeadlessService_setStore(HeadlessService *self, HeadlessSecretStoreFn s) { (*self).store = s; }
+static inline fn HeadlessService_setStore(HeadlessService *self, HeadlessSecretStoreFn s)
+{
+    (*self).store = s;
+}
 ;;GETTER
-static inline HeadlessSecretLoadFn HeadlessService_load(const HeadlessService *self) { return (*self).load; }
+static inline HeadlessSecretLoadFn HeadlessService_load(const HeadlessService *self)
+{
+    return (*self).load;
+}
 ;;SETTER
-static inline fn HeadlessService_setLoad(HeadlessService *self, HeadlessSecretLoadFn l) { (*self).load = l; }
+static inline fn HeadlessService_setLoad(HeadlessService *self, HeadlessSecretLoadFn l)
+{
+    (*self).load = l;
+}
 ;;GETTER
-static inline HeadlessSecretRemoveFn HeadlessService_remove(const HeadlessService *self) { return (*self).remove; }
+static inline HeadlessSecretRemoveFn HeadlessService_remove(const HeadlessService *self)
+{
+    return (*self).remove;
+}
 ;;SETTER
-static inline fn HeadlessService_setRemove(HeadlessService *self, HeadlessSecretRemoveFn r) { (*self).remove = r; }
+static inline fn HeadlessService_setRemove(HeadlessService *self, HeadlessSecretRemoveFn r)
+{
+    (*self).remove = r;
+}
 ;;GETTER
-static inline any HeadlessService_context(const HeadlessService *self) { return (*self).context; }
+static inline any HeadlessService_context(const HeadlessService *self)
+{
+    return (*self).context;
+}
 ;;SETTER
-static inline fn HeadlessService_setContext(HeadlessService *self, any c) { (*self).context = c; }
+static inline fn HeadlessService_setContext(HeadlessService *self, any c)
+{
+    (*self).context = c;
+}
 ;;GETTER
-static inline bool HeadlessService_started(const HeadlessService *self) { return (*self).started; }
+static inline bool HeadlessService_started(const HeadlessService *self)
+{
+    return (*self).started;
+}
 ;;SETTER
-static inline fn HeadlessService_setStarted(HeadlessService *self, bool s) { (*self).started = s; }
+static inline fn HeadlessService_setStarted(HeadlessService *self, bool s)
+{
+    (*self).started = s;
+}
 ;;GETTER
 static inline bool HeadlessService_adminAuthenticated(const HeadlessService *self) {
     return (*self).adminAuthenticated;
@@ -153,9 +205,15 @@ static inline fn HeadlessService_setAdminAuthenticated(HeadlessService *self, bo
     (*self).adminAuthenticated = a;
 }
 ;;GETTER
-static inline bool HeadlessService_acceptRequests(const HeadlessService *self) { return (*self).acceptRequests; }
+static inline bool HeadlessService_acceptRequests(const HeadlessService *self)
+{
+    return (*self).acceptRequests;
+}
 ;;SETTER
-static inline fn HeadlessService_setAcceptRequestsField(HeadlessService *self, bool a) { (*self).acceptRequests = a; }
+static inline fn HeadlessService_setAcceptRequestsField(HeadlessService *self, bool a)
+{
+    (*self).acceptRequests = a;
+}
 ;;GETTER
 static inline u32 HeadlessService_passwordIterations(const HeadlessService *self) {
     return (*self).passwordIterations;
@@ -181,7 +239,7 @@ static HeadlessAdminRecord *adminRecord(HeadlessService *self) {
     return (HeadlessAdminRecord*) Database_row(HeadlessService_database(self), HEADLESS_ADMIN_NAME, 0u);
 }
 
-static bool verifyPasswordTotp(HeadlessService *self, const char *password,
+static bool verifyPasswordTotp(HeadlessService *self, const utf8 *password,
                                u32 code, u64 unixTimeSeconds,
                                HeadlessAdminRecord *record, u64 *outAcceptedStep) {
     if (self == nullptr || password == nullptr || record == nullptr || outAcceptedStep == nullptr)
@@ -226,7 +284,7 @@ static fn cleanup(HeadlessService *self) {
     }
 }
 
-static bool bootstrap(HeadlessService *self, char *outSetupSecret,
+static bool bootstrap(HeadlessService *self, utf8 *outSetupSecret,
                       bytes secretCapacity, bytes *outSecretLength) {
     if (outSecretLength != nullptr)
         *outSecretLength = 0u;
@@ -241,7 +299,7 @@ static bool bootstrap(HeadlessService *self, char *outSetupSecret,
 
     u8 secret[HEADLESS_ADMIN_SECRET_BYTES];
     u8 salt[HEADLESS_SALT_BYTES];
-    char encoded[40];
+    utf8 encoded[40];
     bool truncated = false;
     SecureRandom *random = SecureRandom_0();
     bool generated = random != nullptr && SecureRandom_bytes(random, secret, sizeof secret) &&
@@ -301,7 +359,7 @@ static bool bootstrap(HeadlessService *self, char *outSetupSecret,
 }
 
 HeadlessService *HeadlessService_0() {
-    HeadlessService *self = (HeadlessService*) Memory_alloc(0u, sizeof(HeadlessService));
+    HeadlessService *self = (HeadlessService*) Memory_alloc(0u, Darkbase_arena(), sizeof(HeadlessService));
     if (self == nullptr)
         return nullptr;
     memset(self, 0, sizeof *self);
@@ -309,7 +367,7 @@ HeadlessService *HeadlessService_0() {
     return self;
 }
 
-HeadlessService *HeadlessService_1(const char *databasePath) {
+HeadlessService *HeadlessService_1(const utf8 *databasePath) {
     if (databasePath == nullptr || strlen(databasePath) == 0u ||
         strlen(databasePath) >= FILE_PATH_MAX) {
         THROW("HeadlessService: invalid database path");
@@ -331,7 +389,7 @@ fn HeadlessService_free(HeadlessService *self) {
 
 bool HeadlessService_start(HeadlessService *self, HeadlessSecretStoreFn store,
                            HeadlessSecretLoadFn load, HeadlessSecretRemoveFn remove,
-                            any context, char *outSetupSecret, bytes secretCapacity,
+                            any context, utf8 *outSetupSecret, bytes secretCapacity,
                            bytes *outSecretLength) {
     if (outSecretLength != nullptr)
         *outSecretLength = 0u;
@@ -360,9 +418,8 @@ bool HeadlessService_start(HeadlessService *self, HeadlessSecretStoreFn store,
         THROW("HeadlessService_start: database/schema initialization failed");
         return false;
     }
-    // Enable private lookups while startup validates or creates the admin row.
     HeadlessService_setStarted(self, true);
-    const char *dbPath = HeadlessService_databasePath(self);
+    const utf8 *dbPath = HeadlessService_databasePath(self);
     bool exists = File_exists(dbPath);
     if (exists) {
         if (Database_load(db, dbPath) != DATABASE_OK ||
@@ -390,11 +447,12 @@ bool HeadlessService_start(HeadlessService *self, HeadlessSecretStoreFn store,
     return true;
 }
 
-bool HeadlessService_adminLoginAt(HeadlessService *self, const char *username,
-                                  const char *password, u32 totpCode,
+bool HeadlessService_adminLoginAt(HeadlessService *self, const utf8 *username,
+                                  const utf8 *password, u32 totpCode,
                                   u64 unixTimeSeconds) {
     HeadlessAdminRecord *record = adminRecord(self);
-    if (record == nullptr || username == nullptr || strcmp(username, HEADLESS_ADMIN_NAME) != 0) {
+    if (record == nullptr || username == nullptr ||
+        !CharSequence_equals(CharSequence_cstr(username), CharSequence_cstr(HEADLESS_ADMIN_NAME))) {
         THROW("HeadlessService_adminLogin: unknown admin or service not started");
         return false;
     }
@@ -413,8 +471,8 @@ bool HeadlessService_adminLoginAt(HeadlessService *self, const char *username,
     return true;
 }
 
-bool HeadlessService_adminLogin(HeadlessService *self, const char *username,
-                               const char *password, u32 totpCode) {
+bool HeadlessService_adminLogin(HeadlessService *self, const utf8 *username,
+                               const utf8 *password, u32 totpCode) {
     DateTime now = {0};
     DateTime_set(&now);
     i64 millis = DateTime_epochMillis(&now);
@@ -425,8 +483,8 @@ bool HeadlessService_adminLogin(HeadlessService *self, const char *username,
 }
 
 bool HeadlessService_changeAdminPasswordAt(HeadlessService *self,
-                                           const char *currentPassword,
-                                           const char *newPassword, u32 totpCode,
+                                           const utf8 *currentPassword,
+                                           const utf8 *newPassword, u32 totpCode,
                                            u64 unixTimeSeconds) {
     HeadlessAdminRecord *record = adminRecord(self);
     if (record == nullptr || !HeadlessService_adminAuthenticated(self) ||
@@ -464,8 +522,8 @@ bool HeadlessService_changeAdminPasswordAt(HeadlessService *self,
 }
 
 bool HeadlessService_changeAdminPassword(HeadlessService *self,
-                                        const char *currentPassword,
-                                        const char *newPassword, u32 totpCode) {
+                                        const utf8 *currentPassword,
+                                        const utf8 *newPassword, u32 totpCode) {
     DateTime now = {0};
     DateTime_set(&now);
     i64 millis = DateTime_epochMillis(&now);
@@ -523,13 +581,13 @@ bool HeadlessService_isRequestAllowed(const HeadlessService *self) {
     return HeadlessService_isAcceptingRequests(self);
 }
 
-bool HeadlessService_toString(const HeadlessService *self, char *dest, bytes cap,
+bool HeadlessService_toString(const HeadlessService *self, utf8 *dest, bytes cap,
                               bool *outTruncated) {
     if (outTruncated != nullptr)
         *outTruncated = false;
     if (dest == nullptr || cap == 0u)
         return false;
-    const char *value = self == nullptr ? "nullptr" :
+    const utf8 *value = self == nullptr ? "nullptr" :
         (HeadlessService_started(self) ? "HeadlessService{started}" : "HeadlessService{closed}");
     bytes length = strlen(value);
     bytes copy = length < cap - 1u ? length : cap - 1u;
@@ -540,7 +598,7 @@ bool HeadlessService_toString(const HeadlessService *self, char *dest, bytes cap
     return copy == length;
 }
 
-bool HeadlessService_toStringStruct(const HeadlessService *self, char *dest, bytes cap,
+bool HeadlessService_toStringStruct(const HeadlessService *self, utf8 *dest, bytes cap,
                                     bool *outTruncated) {
     if (outTruncated != nullptr)
         *outTruncated = false;

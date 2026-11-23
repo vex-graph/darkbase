@@ -25,7 +25,7 @@
  *   u32 code             latest typed local result
  *   bool ready                full validated envelope admitted
  *   bool failed               stream cannot continue without explicit reset
- * FUNCTION REGISTRY — exports:
+ * FUNCTION REGISTRY, exports:
  * CONSTRUCTORS:
  *   HeadlessProtocol HeadlessProtocol_0()
  *   HeadlessProtocol HeadlessProtocol_2(u8 *buffer, bytes capacity)
@@ -53,15 +53,15 @@
  *   bool HeadlessProtocol_encode(u16 kind, u16 operation,
  *       u16 status, u32 requestId, const u8 *payload, bytes length,
  *       u8 *dest, bytes capacity, bytes *outLength, bool *outTruncated)
- *   bool HeadlessProtocol_toString(const HeadlessProtocol *self, char *dest,
+ *   bool HeadlessProtocol_toString(const HeadlessProtocol *self, utf8 *dest,
  *                                  bytes capacity, bool *outTruncated)
- *   bool HeadlessProtocol_toStringStruct(const HeadlessProtocol *self, char *dest,
+ *   bool HeadlessProtocol_toStringStruct(const HeadlessProtocol *self, utf8 *dest,
  *                                        bytes capacity, bool *outTruncated)
  * PRIVATE FUNCTIONS:
- *   read16/read32, write16/write32 — bytewise unaligned wire access
- *   validHeader — v1 kind/status/identity invariant, unknown operations opaque
- *   reject — typed cold refusal, terminal latch when requested
- *   project — bounded redacted state formatting
+ *   read16/read32, write16/write32, bytewise unaligned wire access
+ *   validHeader, v1 kind/status/identity invariant, unknown operations opaque
+ *   reject, typed cold refusal, terminal latch when requested
+ *   project, bounded redacted state formatting
  * CONTRACT: live/disjoint spans and external serialization are preconditions;
  * invalid API inputs preserve frame, wire errors fail closed. No arbitrary field
  * setters: lifecycle alone changes initialized bytes and borrowed views under
@@ -72,33 +72,75 @@
 ;;INTENTION("Per the Conflict Triage Law and Single Class Per File Law (Java Law), derived frame counts/backing/readiness change only through constructor/feed/release/reset; setters cannot forge initialized bytes or payload lifetime.")
 
 ;;GETTER
-static inline u8 *HeadlessProtocol_buffer(const HeadlessProtocol *self) { return (*self).buffer; }
+static inline u8 *HeadlessProtocol_buffer(const HeadlessProtocol *self)
+{
+    return (*self).buffer;
+}
 ;;GETTER
-static inline bytes HeadlessProtocol_capacity(const HeadlessProtocol *self) { return (*self).capacity; }
+static inline bytes HeadlessProtocol_capacity(const HeadlessProtocol *self)
+{
+    return (*self).capacity;
+}
 ;;GETTER
-static inline bytes HeadlessProtocol_used(const HeadlessProtocol *self) { return (*self).used; }
+static inline bytes HeadlessProtocol_used(const HeadlessProtocol *self)
+{
+    return (*self).used;
+}
 ;;SETTER
-static inline fn HeadlessProtocol_setUsed(HeadlessProtocol *self, bytes used) { (*self).used = used; }
+static inline fn HeadlessProtocol_setUsed(HeadlessProtocol *self, bytes used)
+{
+    (*self).used = used;
+}
 ;;GETTER
-static inline bytes HeadlessProtocol_expected(const HeadlessProtocol *self) { return (*self).expected; }
+static inline bytes HeadlessProtocol_expected(const HeadlessProtocol *self)
+{
+    return (*self).expected;
+}
 ;;SETTER
-static inline fn HeadlessProtocol_setExpected(HeadlessProtocol *self, bytes expected) { (*self).expected = expected; }
+static inline fn HeadlessProtocol_setExpected(HeadlessProtocol *self, bytes expected)
+{
+    (*self).expected = expected;
+}
 ;;GETTER
-static inline u64 HeadlessProtocol_exhaustionCount(const HeadlessProtocol *self) { return (*self).exhaustionCount; }
+static inline u64 HeadlessProtocol_exhaustionCount(const HeadlessProtocol *self)
+{
+    return (*self).exhaustionCount;
+}
 ;;SETTER
-static inline fn HeadlessProtocol_setExhaustionCount(HeadlessProtocol *self, u64 count) { (*self).exhaustionCount = count; }
+static inline fn HeadlessProtocol_setExhaustionCount(HeadlessProtocol *self, u64 count)
+{
+    (*self).exhaustionCount = count;
+}
 ;;GETTER
-static inline u32 HeadlessProtocol_code(const HeadlessProtocol *self) { return (*self).code; }
+static inline u32 HeadlessProtocol_code(const HeadlessProtocol *self)
+{
+    return (*self).code;
+}
 ;;SETTER
-static inline fn HeadlessProtocol_setCode(HeadlessProtocol *self, u32 code) { (*self).code = code; }
+static inline fn HeadlessProtocol_setCode(HeadlessProtocol *self, u32 code)
+{
+    (*self).code = code;
+}
 ;;GETTER
-static inline bool HeadlessProtocol_ready(const HeadlessProtocol *self) { return (*self).ready; }
+static inline bool HeadlessProtocol_ready(const HeadlessProtocol *self)
+{
+    return (*self).ready;
+}
 ;;SETTER
-static inline fn HeadlessProtocol_setReady(HeadlessProtocol *self, bool ready) { (*self).ready = ready; }
+static inline fn HeadlessProtocol_setReady(HeadlessProtocol *self, bool ready)
+{
+    (*self).ready = ready;
+}
 ;;GETTER
-static inline bool HeadlessProtocol_failed(const HeadlessProtocol *self) { return (*self).failed; }
+static inline bool HeadlessProtocol_failed(const HeadlessProtocol *self)
+{
+    return (*self).failed;
+}
 ;;SETTER
-static inline fn HeadlessProtocol_setFailed(HeadlessProtocol *self, bool failed) { (*self).failed = failed; }
+static inline fn HeadlessProtocol_setFailed(HeadlessProtocol *self, bool failed)
+{
+    (*self).failed = failed;
+}
 
 static u16 read16(const u8 *p) {
     return (u16) ((u16) p[0] | ((u16) p[1] << 8u));
@@ -171,7 +213,7 @@ bool HeadlessProtocol_feed(HeadlessProtocol *self, const u8 *data,
     if (HeadlessProtocol_failed(self)) {
         if (HeadlessProtocol_code(self) == HEADLESS_PROTOCOL_CAPACITY)
             return reject(self, HEADLESS_PROTOCOL_CAPACITY, true);
-        return false; // original terminal rejection already reported
+        return false;
     }
     u8 *buf = HeadlessProtocol_buffer(self);
     if (buf == nullptr)
@@ -330,7 +372,7 @@ bool HeadlessProtocol_encode(u16 kind, u16 operation, u16 status,
     return true;
 }
 
-static bool project(const HeadlessProtocol *self, bool structure, char *dest,
+static bool project(const HeadlessProtocol *self, bool structure, utf8 *dest,
                     bytes capacity, bool *outTruncated) {
     if (outTruncated != nullptr)
         *outTruncated = false;
@@ -357,12 +399,12 @@ static bool project(const HeadlessProtocol *self, bool structure, char *dest,
     return complete;
 }
 
-bool HeadlessProtocol_toString(const HeadlessProtocol *self, char *dest,
+bool HeadlessProtocol_toString(const HeadlessProtocol *self, utf8 *dest,
                                bytes capacity, bool *outTruncated) {
     return project(self, false, dest, capacity, outTruncated);
 }
 
-bool HeadlessProtocol_toStringStruct(const HeadlessProtocol *self, char *dest,
+bool HeadlessProtocol_toStringStruct(const HeadlessProtocol *self, utf8 *dest,
                                      bytes capacity, bool *outTruncated) {
     return project(self, true, dest, capacity, outTruncated);
 }
