@@ -27,7 +27,10 @@ u32 Crc32_update(u32 crc, const_any data, bytes length) {
     return crc;
 }
 
-u32 Crc32_finalize(u32 crc) { return ~crc; }
+u32 Crc32_finalize(u32 crc)
+{
+    return ~crc;
+}
 
 u32 Crc32_of(const_any data, bytes length) {
     return Crc32_finalize(Crc32_update(CRC32_SEED, data, length));

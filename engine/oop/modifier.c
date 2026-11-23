@@ -1,5 +1,6 @@
 #include "vex.h"
 #include "oop/modifier.h"
+#include "re/primitive/char_sequence.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -11,7 +12,7 @@
  * server-sealed/truncated), whether it may be absent (nullable/nonnull), and
  * where it lives (stored, transient, or shared/static). It exists so a field
  * declaration reads like a Java field and the store has ONE place to ask
- * "what did the schema author mean?" — instead of every query re-deciding
+ * "what did the schema author mean?", instead of every query re-deciding
  * access and every caller re-deciding crypto.
  *
  * It is deliberately a VALUE RECORD. It owns no memory, borrows nothing and
@@ -20,7 +21,7 @@
  * DatabaseFieldSpan, it is a described value, not an allocated owner.
  *
  * INTENTIONAL(vex): the keyword set is closed. Flexibility lives in schema
- * VERSIONING and field VISIBILITY — a field is hidden or a new version is
+ * VERSIONING and field VISIBILITY, a field is hidden or a new version is
  * published, never re-declared in place. You do not change a data type just
  * because it is that; the whole point of freezing the words is that an old row
  * written under one declaration keeps meaning the same thing forever. A new
@@ -31,8 +32,8 @@
  *
  * The three axes are orthogonal, so the only structurally illegal state is an
  * axis outside its enum; Modifier_validate catches that and names the axis.
- * Combinations that are merely questionable — a public verifier, a protected
- * in-memory value, a shared transient — are WARNINGS, not rejections, because
+ * Combinations that are merely questionable, a public verifier, a protected
+ * in-memory value, a shared transient, are WARNINGS, not rejections, because
  * a public content hash is legitimate and the schema author decides.
  *
  * The 80 MODIFIER_* presets are declaration sugar over this record. The
@@ -81,15 +82,15 @@
  *     bool Modifier_isPublic/isPrivate/isProtected/isReversible/isOneWay/isLossy
  *     bool Modifier_equals(Modifier a, Modifier b.sh)
  *   Naming:
- *     const char *Modifier_accessName/protectionName/nullabilityName/codeName
- *     const char *Modifier_warningName(u32 warning)
+ *     const utf8 *Modifier_accessName/protectionName/nullabilityName/codeName
+ *     const utf8 *Modifier_warningName(u32 warning)
  *   Terminal path:
- *     Modifier Modifier_parse(const char *text)
- *     Modifier Modifier_applyToken(Modifier self, const char *token)
+ *     Modifier Modifier_parse(const utf8 *text)
+ *     Modifier Modifier_applyToken(Modifier self, const utf8 *token)
  *   Projections:
- *     bool Modifier_toString(Modifier self, char *dest, bytes capacity,
+ *     bool Modifier_toString(Modifier self, utf8 *dest, bytes capacity,
  *                            bool *outTruncated)
- *     bool Modifier_toStringStruct(Modifier self, char *dest, bytes capacity,
+ *     bool Modifier_toStringStruct(Modifier self, utf8 *dest, bytes capacity,
  *                                  bool *outTruncated)
  * PRIVATE HELPERS
  *   ModifierAxis { NONE, ACCESS, PROTECTION, NULLABILITY, TRANSIENT, SHARED }
@@ -113,45 +114,51 @@ typedef enum ModifierAxis {
     MODIFIER_AXIS_SHARED = 5,
 } ModifierAxis;
 
-static ModifierAxis classify(const char *token) {
+static ModifierAxis classify(const utf8 *token) {
     if (token == nullptr || token[0] == '\0')
         return MODIFIER_AXIS_NONE;
-    if (strcmp(token, "private") == 0 || strcmp(token, "public") == 0)
+    CharSequence seq = CharSequence_cstr(token);
+    if (CharSequence_equals(seq, CharSequence_cstr("private")) ||
+        CharSequence_equals(seq, CharSequence_cstr("public")))
         return MODIFIER_AXIS_ACCESS;
-    if (strcmp(token, "plain") == 0 || strcmp(token, "hashed") == 0 ||
-        strcmp(token, "client-sealed") == 0 || strcmp(token, "server-sealed") == 0 ||
-        strcmp(token, "truncated") == 0)
+    if (CharSequence_equals(seq, CharSequence_cstr("plain")) ||
+        CharSequence_equals(seq, CharSequence_cstr("hashed")) ||
+        CharSequence_equals(seq, CharSequence_cstr("client-sealed")) ||
+        CharSequence_equals(seq, CharSequence_cstr("server-sealed")) ||
+        CharSequence_equals(seq, CharSequence_cstr("truncated")))
         return MODIFIER_AXIS_PROTECTION;
-    if (strcmp(token, "nullable") == 0 || strcmp(token, "nonnull") == 0)
+    if (CharSequence_equals(seq, CharSequence_cstr("nullable")) ||
+        CharSequence_equals(seq, CharSequence_cstr("nonnull")))
         return MODIFIER_AXIS_NULLABILITY;
-    if (strcmp(token, "transient") == 0)
+    if (CharSequence_equals(seq, CharSequence_cstr("transient")))
         return MODIFIER_AXIS_TRANSIENT;
-    if (strcmp(token, "static") == 0)
+    if (CharSequence_equals(seq, CharSequence_cstr("static")))
         return MODIFIER_AXIS_SHARED;
     return MODIFIER_AXIS_NONE;
 }
 
-static Modifier applyAxis(Modifier self, ModifierAxis axis, const char *token) {
+static Modifier applyAxis(Modifier self, ModifierAxis axis, const utf8 *token) {
+    CharSequence seq = CharSequence_cstr(token);
     switch (axis) {
         case MODIFIER_AXIS_ACCESS:
-            self.access = strcmp(token, "public") == 0
+            self.access = CharSequence_equals(seq, CharSequence_cstr("public"))
                 ? (u32) MODIFIER_ACCESS_PUBLIC
                 : (u32) MODIFIER_ACCESS_PRIVATE;
             break;
         case MODIFIER_AXIS_PROTECTION:
-            if (strcmp(token, "hashed") == 0)
+            if (CharSequence_equals(seq, CharSequence_cstr("hashed")))
                 self.protection = (u32) MODIFIER_PROTECTION_HASHED;
-            else if (strcmp(token, "client-sealed") == 0)
+            else if (CharSequence_equals(seq, CharSequence_cstr("client-sealed")))
                 self.protection = (u32) MODIFIER_PROTECTION_CLIENT_SEALED;
-            else if (strcmp(token, "server-sealed") == 0)
+            else if (CharSequence_equals(seq, CharSequence_cstr("server-sealed")))
                 self.protection = (u32) MODIFIER_PROTECTION_SERVER_SEALED;
-            else if (strcmp(token, "truncated") == 0)
+            else if (CharSequence_equals(seq, CharSequence_cstr("truncated")))
                 self.protection = (u32) MODIFIER_PROTECTION_TRUNCATED;
             else
                 self.protection = (u32) MODIFIER_PROTECTION_PLAIN;
             break;
         case MODIFIER_AXIS_NULLABILITY:
-            self.nullability = strcmp(token, "nonnull") == 0
+            self.nullability = CharSequence_equals(seq, CharSequence_cstr("nonnull"))
                 ? (u32) MODIFIER_NONNULL
                 : (u32) MODIFIER_NULLABLE;
             break;
@@ -281,7 +288,7 @@ bool Modifier_equals(Modifier a, Modifier b) {
            a.shared == b.shared;
 }
 
-const char *Modifier_accessName(ModifierAccess access) {
+const utf8 *Modifier_accessName(ModifierAccess access) {
     switch (access) {
         case MODIFIER_ACCESS_PRIVATE: return "private";
         case MODIFIER_ACCESS_PUBLIC: return "public";
@@ -289,7 +296,7 @@ const char *Modifier_accessName(ModifierAccess access) {
     }
 }
 
-const char *Modifier_protectionName(ModifierProtection protection) {
+const utf8 *Modifier_protectionName(ModifierProtection protection) {
     switch (protection) {
         case MODIFIER_PROTECTION_PLAIN: return "plain";
         case MODIFIER_PROTECTION_HASHED: return "hashed";
@@ -300,7 +307,7 @@ const char *Modifier_protectionName(ModifierProtection protection) {
     }
 }
 
-const char *Modifier_nullabilityName(ModifierNullability nullability) {
+const utf8 *Modifier_nullabilityName(ModifierNullability nullability) {
     switch (nullability) {
         case MODIFIER_NULLABLE: return "nullable";
         case MODIFIER_NONNULL: return "nonnull";
@@ -308,7 +315,7 @@ const char *Modifier_nullabilityName(ModifierNullability nullability) {
     }
 }
 
-const char *Modifier_codeName(ModifierCode code) {
+const utf8 *Modifier_codeName(ModifierCode code) {
     switch (code) {
         case MODIFIER_OK: return "OK";
         case MODIFIER_INVALID: return "INVALID";
@@ -321,7 +328,7 @@ const char *Modifier_codeName(ModifierCode code) {
     }
 }
 
-const char *Modifier_warningName(u32 warning) {
+const utf8 *Modifier_warningName(u32 warning) {
     switch (warning) {
         case MODIFIER_WARNING_NONE: return "none";
         case MODIFIER_WARNING_PUBLIC_VERIFIER: return "public-verifier";
@@ -332,7 +339,7 @@ const char *Modifier_warningName(u32 warning) {
     }
 }
 
-Modifier Modifier_applyToken(Modifier self, const char *token) {
+Modifier Modifier_applyToken(Modifier self, const utf8 *token) {
     ModifierAxis axis = classify(token);
     if (axis == MODIFIER_AXIS_NONE) {
         self.lastCode = MODIFIER_BAD_TOKEN;
@@ -345,7 +352,7 @@ Modifier Modifier_applyToken(Modifier self, const char *token) {
     return self;
 }
 
-Modifier Modifier_parse(const char *text) {
+Modifier Modifier_parse(const utf8 *text) {
     Modifier self = Modifier_0();
     if (text == nullptr) {
         self.lastCode = MODIFIER_INVALID;
@@ -354,7 +361,7 @@ Modifier Modifier_parse(const char *text) {
     }
     bool seen[5] = { false, false, false, false, false };
     bytes count = 0u;
-    const char *cursor = text;
+    const utf8 *cursor = text;
     while (*cursor != '\0') {
         cursor += strspn(cursor, " \t\r\n");
         if (*cursor == '\0')
@@ -366,7 +373,7 @@ Modifier Modifier_parse(const char *text) {
                   (u32) MODIFIER_TOKEN_MAX - 1u);
             return self;
         }
-        char token[MODIFIER_TOKEN_MAX];
+        utf8 token[MODIFIER_TOKEN_MAX];
         memcpy(token, cursor, length);
         token[length] = '\0';
         ModifierAxis axis = classify(token);
@@ -396,7 +403,7 @@ Modifier Modifier_parse(const char *text) {
     return self;
 }
 
-bool Modifier_toString(Modifier self, char *dest, bytes capacity, bool *outTruncated) {
+bool Modifier_toString(Modifier self, utf8 *dest, bytes capacity, bool *outTruncated) {
     if (dest == nullptr || capacity == 0u) {
         if (outTruncated != nullptr)
             *outTruncated = true;
@@ -414,7 +421,7 @@ bool Modifier_toString(Modifier self, char *dest, bytes capacity, bool *outTrunc
     return !cut;
 }
 
-bool Modifier_toStringStruct(Modifier self, char *dest, bytes capacity,
+bool Modifier_toStringStruct(Modifier self, utf8 *dest, bytes capacity,
                              bool *outTruncated) {
     if (dest == nullptr || capacity == 0u) {
         if (outTruncated != nullptr)
