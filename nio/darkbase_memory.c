@@ -25,7 +25,7 @@ static MemoryArena *s_darkbaseArena = nullptr;
 /** Lazily create and return Darkbase's page-pooled MemoryArena. */
 MemoryArena *Darkbase_arena() {
     if (s_darkbaseArena == nullptr)
-        s_darkbaseArena = MemoryArena_createPages(0);
+        s_darkbaseArena = MemoryArena();
     return s_darkbaseArena;
 }
 
