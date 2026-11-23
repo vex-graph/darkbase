@@ -13,7 +13,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "re/primitive/char_sequence.h"
+#include "re/primitive/vex-string.h"
 #include "nio/darkbase_memory.h"
 
 #define HEADLESS_ADMIN_NAME "admin"
@@ -137,7 +137,7 @@ static inline fn HeadlessService_setAdminSchema(HeadlessService *self, Struct *s
     (*self).adminSchema = s;
 }
 ;;GETTER
-static inline const utf8 *HeadlessService_databasePath(const HeadlessService *self)
+static inline string HeadlessService_databasePath(const HeadlessService *self)
 {
     return (*self).databasePath;
 }
@@ -239,7 +239,7 @@ static HeadlessAdminRecord *adminRecord(HeadlessService *self) {
     return (HeadlessAdminRecord*) Database_row(HeadlessService_database(self), HEADLESS_ADMIN_NAME, 0u);
 }
 
-static bool verifyPasswordTotp(HeadlessService *self, const utf8 *password,
+static bool verifyPasswordTotp(HeadlessService *self, string password,
                                u32 code, u64 unixTimeSeconds,
                                HeadlessAdminRecord *record, u64 *outAcceptedStep) {
     if (self == nullptr || password == nullptr || record == nullptr || outAcceptedStep == nullptr)
@@ -367,7 +367,7 @@ HeadlessService *HeadlessService_0() {
     return self;
 }
 
-HeadlessService *HeadlessService_1(const utf8 *databasePath) {
+HeadlessService *HeadlessService_1(string databasePath) {
     if (databasePath == nullptr || strlen(databasePath) == 0u ||
         strlen(databasePath) >= FILE_PATH_MAX) {
         THROW("HeadlessService: invalid database path");
@@ -419,7 +419,7 @@ bool HeadlessService_start(HeadlessService *self, HeadlessSecretStoreFn store,
         return false;
     }
     HeadlessService_setStarted(self, true);
-    const utf8 *dbPath = HeadlessService_databasePath(self);
+    string dbPath = HeadlessService_databasePath(self);
     bool exists = File_exists(dbPath);
     if (exists) {
         if (Database_load(db, dbPath) != DATABASE_OK ||
@@ -447,12 +447,12 @@ bool HeadlessService_start(HeadlessService *self, HeadlessSecretStoreFn store,
     return true;
 }
 
-bool HeadlessService_adminLoginAt(HeadlessService *self, const utf8 *username,
-                                  const utf8 *password, u32 totpCode,
+bool HeadlessService_adminLoginAt(HeadlessService *self, string username,
+                                  string password, u32 totpCode,
                                   u64 unixTimeSeconds) {
     HeadlessAdminRecord *record = adminRecord(self);
     if (record == nullptr || username == nullptr ||
-        !CharSequence_equals(CharSequence_cstr(username), CharSequence_cstr(HEADLESS_ADMIN_NAME))) {
+        !string_equals(username, HEADLESS_ADMIN_NAME)) {
         THROW("HeadlessService_adminLogin: unknown admin or service not started");
         return false;
     }
@@ -471,8 +471,8 @@ bool HeadlessService_adminLoginAt(HeadlessService *self, const utf8 *username,
     return true;
 }
 
-bool HeadlessService_adminLogin(HeadlessService *self, const utf8 *username,
-                               const utf8 *password, u32 totpCode) {
+bool HeadlessService_adminLogin(HeadlessService *self, string username,
+                               string password, u32 totpCode) {
     DateTime now = {0};
     DateTime_set(&now);
     i64 millis = DateTime_epochMillis(&now);
@@ -483,8 +483,8 @@ bool HeadlessService_adminLogin(HeadlessService *self, const utf8 *username,
 }
 
 bool HeadlessService_changeAdminPasswordAt(HeadlessService *self,
-                                           const utf8 *currentPassword,
-                                           const utf8 *newPassword, u32 totpCode,
+                                           string currentPassword,
+                                           string newPassword, u32 totpCode,
                                            u64 unixTimeSeconds) {
     HeadlessAdminRecord *record = adminRecord(self);
     if (record == nullptr || !HeadlessService_adminAuthenticated(self) ||
@@ -522,8 +522,8 @@ bool HeadlessService_changeAdminPasswordAt(HeadlessService *self,
 }
 
 bool HeadlessService_changeAdminPassword(HeadlessService *self,
-                                        const utf8 *currentPassword,
-                                        const utf8 *newPassword, u32 totpCode) {
+                                        string currentPassword,
+                                        string newPassword, u32 totpCode) {
     DateTime now = {0};
     DateTime_set(&now);
     i64 millis = DateTime_epochMillis(&now);
@@ -587,7 +587,7 @@ bool HeadlessService_toString(const HeadlessService *self, utf8 *dest, bytes cap
         *outTruncated = false;
     if (dest == nullptr || cap == 0u)
         return false;
-    const utf8 *value = self == nullptr ? "nullptr" :
+    string value = self == nullptr ? "nullptr" :
         (HeadlessService_started(self) ? "HeadlessService{started}" : "HeadlessService{closed}");
     bytes length = strlen(value);
     bytes copy = length < cap - 1u ? length : cap - 1u;

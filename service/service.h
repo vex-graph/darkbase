@@ -28,17 +28,17 @@ typedef struct HeadlessAdminRecord {
     u64 lastTotpStep;
 } HeadlessAdminRecord;
 
-typedef bool (*HeadlessSecretStoreFn)(any context, const utf8 *service,
-                                      const utf8 *account, const u8 *secret,
+typedef bool (*HeadlessSecretStoreFn)(any context, string service,
+                                      string account, const u8 *secret,
                                       bytes secretLength);
-typedef bool (*HeadlessSecretLoadFn)(any context, const utf8 *service,
-                                     const utf8 *account, u8 *dest,
+typedef bool (*HeadlessSecretLoadFn)(any context, string service,
+                                     string account, u8 *dest,
                                      bytes capacity, bytes *outLength);
-typedef bool (*HeadlessSecretRemoveFn)(any context, const utf8 *service,
-                                       const utf8 *account);
+typedef bool (*HeadlessSecretRemoveFn)(any context, string service,
+                                       string account);
 
 HeadlessService *HeadlessService_0();
-HeadlessService *HeadlessService_1(const utf8 *databasePath);
+HeadlessService *HeadlessService_1(string databasePath);
 #define HeadlessService(...) CONSTRUCTOR_DISPATCH(HeadlessService, __VA_ARGS__)
 #define HeadlessService_zero() HeadlessService_0()
 
@@ -61,11 +61,11 @@ bool HeadlessService_start(HeadlessService *self, HeadlessSecretStoreFn store,
  * Authenticate the sole admin with password and current six-digit TOTP.
  * Successful TOTP steps are durably saved before this returns true.
  */
-bool HeadlessService_adminLogin(HeadlessService *self, const utf8 *username,
-                               const utf8 *password, u32 totpCode);
+bool HeadlessService_adminLogin(HeadlessService *self, string username,
+                               string password, u32 totpCode);
 /** Deterministic clock seam for owner tests; production uses adminLogin. */
-bool HeadlessService_adminLoginAt(HeadlessService *self, const utf8 *username,
-                                  const utf8 *password, u32 totpCode,
+bool HeadlessService_adminLoginAt(HeadlessService *self, string username,
+                                  string password, u32 totpCode,
                                   u64 unixTimeSeconds);
 
 /**
@@ -73,11 +73,11 @@ bool HeadlessService_adminLoginAt(HeadlessService *self, const utf8 *username,
  * forced-change state are persisted before success is returned.
  */
 bool HeadlessService_changeAdminPassword(HeadlessService *self,
-                                        const utf8 *currentPassword,
-                                        const utf8 *newPassword, u32 totpCode);
+                                        string currentPassword,
+                                        string newPassword, u32 totpCode);
 bool HeadlessService_changeAdminPasswordAt(HeadlessService *self,
-                                           const utf8 *currentPassword,
-                                           const utf8 *newPassword, u32 totpCode,
+                                           string currentPassword,
+                                           string newPassword, u32 totpCode,
                                            u64 unixTimeSeconds);
 
 /**
