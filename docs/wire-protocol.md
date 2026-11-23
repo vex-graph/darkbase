@@ -1,4 +1,4 @@
-# Headless wire protocol — envelope v1
+# Headless wire protocol, envelope v1
 
 ## Current State
 
